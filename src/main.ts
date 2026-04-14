@@ -1,6 +1,6 @@
 import { App, Menu, Notice, Plugin, PluginManifest, setIcon } from "obsidian";
 import { join } from "path";
-import { VectorDB } from "./db";
+import { VectorDB, SCHEMA_VERSION } from "./db";
 import { IndexingEngine, IndexStatus } from "./indexer";
 import { VaultWatcher } from "./watcher";
 import { AnamnesisSettingTab, PluginSettings, DEFAULT_SETTINGS } from "./settings";
@@ -57,7 +57,7 @@ export default class AnamnesisPlugin extends Plugin {
       if (!this.vectorDB || !this.provider) {
         throw new Error("[Anamnesis] Core not initialized yet — reload plugin.");
       }
-      return new SearchView(leaf, this.vectorDB, this.provider);
+      return new SearchView(leaf, this.vectorDB, this.provider, this.settings);
     });
 
     this.registerView(GRAPH_VIEW_TYPE, (leaf) => {
@@ -136,15 +136,27 @@ export default class AnamnesisPlugin extends Plugin {
     await this.vectorDB.connect();
 
     const storedDim = await this.vectorDB.getStoredDim();
-    if (storedDim !== null && storedDim !== this.provider.dimension) {
+    const dimMismatch = storedDim !== null && storedDim !== this.provider.dimension;
+    if (dimMismatch) {
       const msg =
         `[Anamnesis] Embedding model changed (${storedDim} → ${this.provider.dimension} dim). ` +
         `Run "Re-index vault" to rebuild the index.`;
       console.warn(msg);
       new Notice(msg, 8000);
-      return;
     }
 
+    const storedSchema = await this.vectorDB.getSchemaVersion();
+    const schemaMismatch = storedSchema !== null && storedSchema !== SCHEMA_VERSION;
+    if (schemaMismatch) {
+      const msg =
+        `[Anamnesis] Index schema updated (v${storedSchema} → v${SCHEMA_VERSION}). ` +
+        `Run "Re-index vault" to rebuild with improved embeddings.`;
+      console.warn(msg);
+      new Notice(msg, 8000);
+    }
+
+    // Always ensure the table exists so the panel and commands work.
+    // indexAll() will drop and recreate it with the correct schema on re-index.
     await this.vectorDB.ensureTable();
 
     this.indexer = new IndexingEngine(
@@ -155,7 +167,9 @@ export default class AnamnesisPlugin extends Plugin {
       (status) => this.setStatus(status)
     );
 
-    if (this.settings.autoIndexOnChange) {
+    // Skip the watcher when there's a schema/dim mismatch — incremental adds
+    // would fail against the old table. The user must re-index first.
+    if (this.settings.autoIndexOnChange && !dimMismatch && !schemaMismatch) {
       this.watcher = new VaultWatcher(this.app, this.indexer, this.settings);
       this.watcher.start();
     }

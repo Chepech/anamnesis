@@ -22,6 +22,11 @@ export interface PluginSettings {
   mcpEnabled: boolean;
   /** Port the MCP HTTP server listens on (127.0.0.1 only). */
   mcpPort: number;
+  /**
+   * Weight applied to the backlink count boost during search reranking.
+   * 0 = pure semantic similarity. Higher values surface well-linked notes more.
+   */
+  importanceWeight: number;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -37,6 +42,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   indexingStrategy: "conservative",
   mcpEnabled: false,
   mcpPort: 8868,
+  importanceWeight: 0.05,
 };
 
 export class AnamnesisSettingTab extends PluginSettingTab {
@@ -186,6 +192,27 @@ export class AnamnesisSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.excludePatterns)
           .onChange(async (value: string) => {
             this.plugin.settings.excludePatterns = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // ── Search ──────────────────────────────────────────────────────────────
+    containerEl.createEl("h3", { text: "Search" });
+
+    new Setting(containerEl)
+      .setName("Graph importance boost")
+      .setDesc(
+        "How much to boost notes that are heavily linked to by other notes. " +
+        "0 = pure semantic similarity. 0.05 is a subtle nudge; 0.2+ makes backlink count dominant. " +
+        "Takes effect immediately — no re-index needed."
+      )
+      .addSlider((slider) =>
+        slider
+          .setLimits(0, 0.5, 0.01)
+          .setValue(this.plugin.settings.importanceWeight)
+          .setDynamicTooltip()
+          .onChange(async (value: number) => {
+            this.plugin.settings.importanceWeight = value;
             await this.plugin.saveSettings();
           })
       );

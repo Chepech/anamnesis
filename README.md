@@ -8,38 +8,55 @@ Anamnesis is an Obsidian plugin that turns your vault into a queryable semantic 
 
 ## What It Does
 
-- **Local-first indexing** — embeds every note into a 384-dimensional vector using a bundled ML model. No network required. Everything runs inside Obsidian.
-- **Semantic search** — find notes by concept, not exact wording. Ask "what did I write about decision fatigue?" and it finds relevant passages even if those words don't appear.
-- **Vector graph** — a 2D map of your entire vault's semantic space, where proximity means conceptual similarity.
-- **MCP server** *(planned)* — exposes retrieval tools to AI agents like Claude Code so they can query your vault as a knowledge source during conversations.
+- **Context-aware indexing** — chunks notes along heading boundaries, preserving the full heading hierarchy and injecting it into every embedding. A chunk from a `## Database` section inside `# Infrastructure` carries that structural address into its vector, so searches surface the right note even when the query keywords don't appear in the chunk itself.
+- **Graph-aware embeddings** — notes that are heavily linked to by other notes get a semantic boost. If 20 notes about "database scaling" link to "Migration Plan," that note's vector will be close to "database scaling" queries even if those exact words don't appear in its text.
+- **Semantic search** — find notes by concept, not exact wording. Results show the full heading path to the matching passage and any YAML tags associated with the note.
+- **Vector graph** — a 2D map of your vault's semantic space, where proximity means conceptual similarity.
+- **MCP server** — exposes retrieval tools to AI agents (Claude Code, Claude Desktop, any MCP client) so they can query your vault as a live knowledge source during conversations.
+
 ---
- Full Re-index (indexAll)
 
-  Triggered manually via the Re-index button or command. Destructive replace — it calls db.dropTable()
-   first, wiping the entire LanceDB table, then rebuilds from scratch by walking every indexable file
-  in the vault. There is no diffing or merging. The mtime cache is also cleared at the start, so
-  nothing is skipped.
+## Indexing Pipeline
 
-  This is the only way to guarantee consistency, but it's expensive on large vaults.
+### Context-Aware Chunking
 
-  ---
-  Incremental Update (indexFile / deleteFile)
+The chunker splits Markdown at heading boundaries — a chunk never crosses a `#` line. Each chunk carries:
 
-  Triggered by the VaultWatcher on individual file events (create, modify, rename, delete), debounced
-  500ms.
+- **`context_path`** — the full heading hierarchy leading to that chunk: `"Infrastructure > Database > Migration"`. This is injected into the text before embedding so the vector encodes structural position, not just content.
+- **`heading`** — the immediate heading (preserved for compatibility).
+- **`tags`** — YAML frontmatter tags extracted and stored as searchable metadata.
 
-  For a modified file (indexFile):
-  1. Check the in-memory mtime cache — if the file's stat.mtime hasn't changed since last time, skip
-  entirely (no LanceDB call)
-  2. If changed: run table.delete('file_path = "..."') to remove all existing chunks for that file
-  3. Re-chunk and re-embed the new content
-  4. table.add(records) with the fresh chunks
-  5. Update the mtime cache
+### Breadcrumb Injection
 
-  For a deleted/renamed file (deleteFile):
-  - Just table.delete('file_path = "..."') and evict from the mtime cache. A rename triggers a delete
-  on the old path and indexFile on the new one.
+Before embedding, each chunk's text is prefixed with a breadcrumb:
 
+```
+[Note Title] > [Infrastructure > Database] :: The actual chunk text here...
+```
+
+The stored `text` field keeps the raw content. Only the vector is computed from the breadcrumb-injected form. This means a query like "why did we choose Postgres?" finds the infrastructure note because "Infrastructure" is baked into the vector even if the chunk itself only says "we moved to PostgreSQL."
+
+### Graph-Aware Embeddings (Backlink Boost)
+
+During indexing, each note's backlinks are resolved via `metadataCache.resolvedLinks`. The top 5 incoming link titles are appended to the first chunk's embedding text:
+
+```
+[Note Title] :: First paragraph... Linked from: Database Scaling, Project Phoenix, Architecture Overview
+```
+
+The `importance_score` (backlink count) is stored per chunk and used to apply a small post-retrieval boost during search:
+
+```
+final_score = distance - (importance_weight × log(1 + importance_score))
+```
+
+The `importance_weight` is tunable in settings (default `0.05`) — small enough that semantic similarity stays dominant, but enough to break ties in favor of well-connected notes.
+
+### Full Re-index vs. Incremental Update
+
+**Full re-index** — triggered via the Re-index button or command. Drops the entire LanceDB table and rebuilds from scratch. The only way to guarantee consistency; necessary after model changes or schema updates.
+
+**Incremental update** — triggered by the `VaultWatcher` on `create`, `modify`, `rename`, and `delete` events (500ms debounce). For a modified file: checks the in-memory mtime cache, deletes existing chunks for that path, re-chunks and re-embeds, stores fresh records. For deleted/renamed files: deletes by path and evicts from the mtime cache.
 
 ---
 
@@ -50,49 +67,59 @@ Anamnesis is an Obsidian plugin that turns your vault into a queryable semantic 
 Opened via the ribbon icon or `Anamnesis: Open control panel` in the command palette. Lives in the right sidebar.
 
 Shows:
-- Current indexing status with a pulsing indicator
+- Current indexing status with a live progress indicator
 - Chunk count and active model
 - Re-index, Pause, and Resume controls
 - Buttons to open Semantic Search and the Vector Graph
 
 ### Semantic Search
 
-Opens in the right sidebar alongside the control panel (like Obsidian's native Backlinks pane). Type a natural-language query and Anamnesis embeds it on the fly, searches the vector index, and returns the most semantically relevant notes grouped by file. Results link directly to the source note.
+Opens in the right sidebar. Type a natural-language query — Anamnesis embeds it on the fly, searches the vector index (with optional backlink boost), and returns the most semantically relevant notes grouped by file. Each result shows the full `context_path` to the matching passage and any associated tags. Results link directly to the source note.
 
 ### Vector Graph
 
 Opens as a full editor tab. An interactive canvas showing all indexed notes as nodes in 2D semantic space.
 
-#### How the graph works
+Each note is represented by its first chunk's 384-dimensional embedding vector. **UMAP** compresses those dimensions to 2 for display, preserving neighborhood structure — notes that were close in high-dimensional space stay close in 2D. **Edges** connect the top-5 nearest neighbors of each node by cosine similarity in the original space; thickness and opacity reflect similarity strength.
 
-Each note is represented by a 384-dimensional embedding vector — a point in high-dimensional space where direction encodes meaning. Notes about similar topics end up close together; unrelated notes are far apart.
+**Node colors** represent top-level vault folders. Hover a node for the file name and snippet; click to open the note.
 
-**UMAP** (Uniform Manifold Approximation and Projection) compresses those 384 dimensions down to 2 for display. It works by building a graph of nearest neighbors in high-dimensional space, then finding a 2D layout that preserves the same neighborhood structure as faithfully as possible. Notes that were close in 384D stay close in 2D. The layout takes ~200–300 optimization epochs to converge — you'll see the progress percentage in the status bar while it runs.
-
-**Edges** are drawn between the top-5 nearest neighbors of each node, computed from cosine similarity in the original 384D space (not the projected 2D). Thicker, more opaque edges mean higher similarity. Two notes with a thin faint edge share some conceptual overlap; two notes with a thick bright edge are closely related.
-
-**Node colors** represent top-level vault folders:
-
-| Color | Meaning |
-|-------|---------|
-| Each unique color | One top-level folder in your vault |
-| Nodes of the same color | Notes from the same folder |
-
-Up to 12 distinct folder colors cycle through the palette. Notes at the vault root get their own color. The color legend isn't rendered on canvas — hover a node to see its full file path in the tooltip.
-
-**Navigation:**
-- Scroll to zoom (zooms toward the mouse cursor)
-- Drag to pan
-- Hover a node to see the file name and a text snippet
-- Click a node to open the note in the editor
+**Navigation:** scroll to zoom, drag to pan.
 
 ### Status Bar
 
-The `Anamnesis: Ready` item in the bottom-right status bar is interactive. Click it to:
+The database icon in the bottom-right status bar is interactive. Click it to:
 - **While idle**: trigger a re-index or open the control panel
 - **While indexing**: pause or cancel the current run
 - **While paused**: resume or cancel
 - **On error**: see the error and retry
+
+---
+
+## MCP Server
+
+Anamnesis can run a local MCP server, making your vault queryable from any MCP-compatible agent.
+
+**Enable:** Settings → MCP Server → toggle on. Default port: `8868`.
+
+**Claude Desktop config:**
+```json
+{
+  "mcpServers": {
+    "anamnesis": { "url": "http://localhost:8868/mcp" }
+  }
+}
+```
+
+The config snippet (with copy button) is available directly in plugin settings.
+
+### Tools
+
+| Tool | Description |
+|------|-------------|
+| `search_vault` | Semantic search. Returns ranked chunks with `file_path`, `context_path`, `text`, `tags`, `importance_score`, and similarity `score`. |
+| `read_note` | Full markdown content of a note by vault-relative path. |
+| `list_indexed_files` | All indexed file paths with chunk counts, sorted by chunk count. |
 
 ---
 
@@ -101,7 +128,7 @@ The `Anamnesis: Ready` item in the bottom-right status bar is interactive. Click
 1. Build: `npm run build`
 2. Deploy to vault: `node scripts/deploy.mjs "path/to/vault"`
 3. Enable the plugin in Obsidian → Settings → Community plugins
-4. The plugin will load the embedding model on first run (~23 MB download, cached locally)
+4. The plugin loads the embedding model on first run (~23 MB download, cached locally)
 5. Click **Re-index vault** to build the initial index
 
 ---
@@ -116,9 +143,13 @@ The `Anamnesis: Ready` item in the bottom-right status bar is interactive. Click
 | Chunk size | 512 | Max characters per chunk. |
 | Chunk overlap | 64 | Characters of overlap between consecutive chunks. |
 | Exclude patterns | `.obsidian`, `node_modules`, `Archives` | One folder/glob per line. Matching files are skipped. |
-| Auto-index on change | On | Re-embeds modified notes in the background. |
+| Auto-index on change | On | Re-embeds modified notes in the background. Paused when a schema or model change is detected until re-index completes. |
+| Indexing strategy | Conservative | Conservative (30 s delay) batches edits; Aggressive (5 s) picks up changes faster. |
+| Graph importance boost | 0.05 | How much backlink count influences search ranking. 0 = pure semantic similarity. Takes effect immediately, no re-index needed. |
+| MCP enabled | Off | Starts the local HTTP MCP server. |
+| MCP port | 8868 | Port the MCP server listens on (127.0.0.1 only). |
 
-Changing the embedding model requires a full re-index (different models produce incompatible vector spaces).
+Changing the embedding model or triggering a schema update (new plugin version) requires a full re-index. The plugin will display a notice on load and suppress the background watcher until re-indexing is complete.
 
 ---
 
@@ -134,7 +165,7 @@ Changing the embedding model requires a full re-index (different models produce 
 | Remote Embeddings | OpenAI SDK (optional) |
 | Dimensionality Reduction | umap-js |
 | Visualization | Canvas 2D |
-| Agent Protocol | MCP SDK *(planned)* |
+| Agent Protocol | MCP SDK (Streamable HTTP) |
 
 ---
 
@@ -144,30 +175,39 @@ Changing the embedding model requires a full re-index (different models produce 
 Obsidian Vault
      │
      ▼
-VaultWatcher         — listens to create / modify / delete / rename events
+VaultWatcher         — create / modify / delete / rename events, 500ms debounce
      │
      ▼
-IndexingEngine       — chunks Markdown, batches embedding calls, manages mtime cache
+IndexingEngine       — heading-boundary chunking, breadcrumb injection,
+     │                 backlink resolution, YAML tag extraction, mtime cache
      │
      ├──▶ LocalEmbeddingProvider   (@xenova/transformers, fully offline)
      └──▶ OpenAIEmbeddingProvider  (optional, requires API key)
                │
                ▼
-           LanceDB                 — fixed-size vector table on local disk
+           LanceDB                 — vector + metadata table on local disk
+           (context_path, tags,     schema versioned; mismatch triggers re-index notice
+            importance_score,
+            schema_version)
                │
-         ┌─────┴──────┐
-         ▼             ▼
-   SemanticSearch   VectorGraph
-   (right sidebar)  (editor tab, UMAP → Canvas2D)
+     ┌─────────┼──────────┐
+     ▼         ▼           ▼
+SemanticSearch  VectorGraph  MCP Server
+(right sidebar) (UMAP →      (Streamable HTTP,
+                 Canvas2D)    127.0.0.1 only)
 ```
 
 ---
 
 ## Roadmap
 
-- [ ] MCP server — expose `semantic_search`, `contextual_retrieve`, `reindex` to agents
+- [x] MCP server — `search_vault`, `read_note`, `list_indexed_files`
+- [x] Context-aware chunking — heading-boundary splits, full hierarchy tracking
+- [x] Breadcrumb injection — structural address embedded into every vector
+- [x] Graph-aware embeddings — backlink boost for well-connected notes
+- [x] YAML tag extraction — tags stored as filterable metadata
+- [ ] Parent-child multi-vector retrieval — summary + chunk at two resolutions
 - [ ] Hybrid search — BM25 keyword + vector similarity combined
 - [ ] Approximate k-NN for large vaults (>2k notes)
-- [ ] Web Worker for UMAP (avoid blocking UI on very large graphs)
 - [ ] Graph legend overlay showing folder → color mapping
-- [ ] Feedback loop for search relevance tuning
+- [ ] Search relevance feedback loop

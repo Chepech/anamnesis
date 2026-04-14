@@ -137,9 +137,12 @@ export class AnamnesisServerMCP {
 
         const results = rows.map((r: any) => ({
           file_path: r.file_path as string,
+          context_path: r.context_path as string,
           heading: r.heading as string,
           chunk_index: r.chunk_index as number,
           text: r.text as string,
+          tags: r.tags as string,
+          importance_score: r.importance_score as number,
           // LanceDB adds _distance for vector search; cosine distance ∈ [0,2]
           // for unit vectors, so similarity = 1 - distance/2 gives a clean [0,1] score.
           score: r._distance !== undefined

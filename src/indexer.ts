@@ -1,5 +1,5 @@
 import { App, TFile } from "obsidian";
-import { VectorDB, ChunkRecord } from "./db";
+import { VectorDB, ChunkRecord, SCHEMA_VERSION } from "./db";
 import { splitMarkdown } from "./chunker";
 import type { EmbeddingProvider } from "./embedding/bridge";
 import type { PluginSettings } from "./settings";
@@ -15,6 +15,29 @@ export type StatusCallback = (status: IndexStatus) => void;
 
 // How many chunks to embed in one provider call
 const EMBED_BATCH_SIZE = 32;
+
+// Max characters used for the breadcrumb prefix before " :: " + chunk text.
+// Keeps the total embed text within the 256-token ceiling of all-MiniLM-L6-v2.
+const BREADCRUMB_MAX_CHARS = 150;
+
+// Max number of backlink titles appended to the first chunk of each note.
+const MAX_BACKLINKS = 5;
+
+/**
+ * Returns the titles of notes that link TO the given file, sorted by
+ * link count descending. Uses the public metadataCache.resolvedLinks map.
+ */
+function getBacklinkTitles(app: App, file: TFile): string[] {
+  const titles: string[] = [];
+  const resolvedLinks = app.metadataCache.resolvedLinks;
+  for (const [sourcePath, targets] of Object.entries(resolvedLinks)) {
+    if (targets[file.path] !== undefined) {
+      const name = sourcePath.split("/").pop()?.replace(/\.md$/i, "") ?? "";
+      if (name) titles.push(name);
+    }
+  }
+  return titles;
+}
 
 export class IndexingEngine {
   private app: App;
@@ -229,10 +252,41 @@ export class IndexingEngine {
     const chunks = splitMarkdown(content, this.settings.chunkSize, this.settings.chunkOverlap);
     if (chunks.length === 0) return [];
 
-    const texts = chunks.map((c) => c.text);
+    // ── Frontmatter tags (Strategy 3) ──────────────────────────────────────
+    const fileCache = this.app.metadataCache.getFileCache(file);
+    const fm = fileCache?.frontmatter ?? {};
+    const rawTags = fm.tags;
+    const tags = Array.isArray(rawTags)
+      ? rawTags.join(", ")
+      : typeof rawTags === "string"
+        ? rawTags
+        : "";
+
+    // ── Backlinks (Strategy 4) ──────────────────────────────────────────────
+    const backlinkTitles = getBacklinkTitles(this.app, file).slice(0, MAX_BACKLINKS);
+    const importanceScore = backlinkTitles.length;
+    const backlinkSuffix =
+      backlinkTitles.length > 0 ? ` Linked from: ${backlinkTitles.join(", ")}` : "";
+
+    // ── Breadcrumb injection (Strategy 1) ──────────────────────────────────
+    const title = file.basename;
+    const embedTexts = chunks.map((c, idx) => {
+      const crumb = c.context_path
+        ? `[${title}] > [${c.context_path}]`
+        : `[${title}]`;
+      const crumbTrimmed =
+        crumb.length > BREADCRUMB_MAX_CHARS
+          ? crumb.slice(0, BREADCRUMB_MAX_CHARS - 3) + "..."
+          : crumb;
+      const base = `${crumbTrimmed} :: ${c.text}`;
+      // Backlink suffix only on the first chunk (note-level summary signal)
+      return idx === 0 ? base + backlinkSuffix : base;
+    });
+
+    // ── Embed in batches ────────────────────────────────────────────────────
     const vectors: number[][] = [];
-    for (let i = 0; i < texts.length; i += EMBED_BATCH_SIZE) {
-      const batchVectors = await this.provider.embed(texts.slice(i, i + EMBED_BATCH_SIZE));
+    for (let i = 0; i < embedTexts.length; i += EMBED_BATCH_SIZE) {
+      const batchVectors = await this.provider.embed(embedTexts.slice(i, i + EMBED_BATCH_SIZE));
       vectors.push(...batchVectors);
     }
 
@@ -240,10 +294,14 @@ export class IndexingEngine {
       id: `${file.path}:${chunk.chunkIndex}`,
       file_path: file.path,
       heading: chunk.heading,
+      context_path: chunk.context_path,
       chunk_index: chunk.chunkIndex,
       last_modified: file.stat.mtime,
       text: chunk.text,
       vector: vectors[idx],
+      tags,
+      importance_score: importanceScore,
+      schema_version: SCHEMA_VERSION,
     }));
   }
 }

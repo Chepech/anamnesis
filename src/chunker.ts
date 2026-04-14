@@ -1,6 +1,7 @@
 export interface Chunk {
   text: string;
-  heading: string;
+  heading: string;       // last heading seen — preserved for compatibility
+  context_path: string;  // full hierarchy: "Infrastructure > Database > Migration"
   chunkIndex: number;
 }
 
@@ -10,7 +11,7 @@ const DEFAULT_OVERLAP = 64;
 /**
  * Simple recursive character text splitter.
  * Splits on paragraph breaks first, then newlines, then spaces.
- * Preserves heading context for each chunk.
+ * Preserves full heading hierarchy (context_path) for each chunk.
  */
 export function splitMarkdown(
   content: string,
@@ -18,26 +19,45 @@ export function splitMarkdown(
   overlap = DEFAULT_OVERLAP
 ): Chunk[] {
   const chunks: Chunk[] = [];
-  let currentHeading = "";
-  const lines = content.split("\n");
 
-  // Walk lines to track the current heading for context
-  const blocks: { heading: string; text: string }[] = [];
+  const headingStack: { level: number; text: string }[] = [];
+  let currentHeading = "";
+
+  const blocks: { heading: string; context_path: string; text: string }[] = [];
   let buffer: string[] = [];
 
+  const lines = content.split("\n");
+
   for (const line of lines) {
-    const headingMatch = line.match(/^#{1,6}\s+(.+)/);
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
     if (headingMatch) {
+      // Flush accumulated buffer before updating the heading stack
       if (buffer.length > 0) {
-        blocks.push({ heading: currentHeading, text: buffer.join("\n") });
+        blocks.push({
+          heading: currentHeading,
+          context_path: headingStack.map((h) => h.text).join(" > "),
+          text: buffer.join("\n"),
+        });
         buffer = [];
       }
-      currentHeading = headingMatch[1].trim();
+      const level = headingMatch[1].length;
+      const text = headingMatch[2].trim();
+      // Pop all entries at the same or deeper level
+      while (headingStack.length && headingStack[headingStack.length - 1].level >= level) {
+        headingStack.pop();
+      }
+      headingStack.push({ level, text });
+      currentHeading = text;
     }
     buffer.push(line);
   }
+
   if (buffer.length > 0) {
-    blocks.push({ heading: currentHeading, text: buffer.join("\n") });
+    blocks.push({
+      heading: currentHeading,
+      context_path: headingStack.map((h) => h.text).join(" > "),
+      text: buffer.join("\n"),
+    });
   }
 
   let chunkIndex = 0;
@@ -46,12 +66,22 @@ export function splitMarkdown(
     if (!text) continue;
 
     if (text.length <= chunkSize) {
-      chunks.push({ text, heading: block.heading, chunkIndex: chunkIndex++ });
+      chunks.push({
+        text,
+        heading: block.heading,
+        context_path: block.context_path,
+        chunkIndex: chunkIndex++,
+      });
     } else {
       // Split large blocks by sentence/paragraph boundaries
       const subChunks = splitText(text, chunkSize, overlap);
       for (const sub of subChunks) {
-        chunks.push({ text: sub, heading: block.heading, chunkIndex: chunkIndex++ });
+        chunks.push({
+          text: sub,
+          heading: block.heading,
+          context_path: block.context_path,
+          chunkIndex: chunkIndex++,
+        });
       }
     }
   }

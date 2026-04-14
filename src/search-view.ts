@@ -1,12 +1,14 @@
 import { ItemView, WorkspaceLeaf, TFile } from "obsidian";
 import type { VectorDB, ChunkRecord } from "./db";
 import type { EmbeddingProvider } from "./embedding/bridge";
+import type { PluginSettings } from "./settings";
 
 export const SEARCH_VIEW_TYPE = "anamnesis-search";
 
 export class SearchView extends ItemView {
   private vectorDB: VectorDB;
   private provider: EmbeddingProvider;
+  private settings: PluginSettings;
 
   // DOM refs
   private inputEl!: HTMLInputElement;
@@ -19,11 +21,13 @@ export class SearchView extends ItemView {
   constructor(
     leaf: WorkspaceLeaf,
     vectorDB: VectorDB,
-    provider: EmbeddingProvider
+    provider: EmbeddingProvider,
+    settings: PluginSettings
   ) {
     super(leaf);
     this.vectorDB = vectorDB;
     this.provider = provider;
+    this.settings = settings;
   }
 
   getViewType(): string {
@@ -98,7 +102,7 @@ export class SearchView extends ItemView {
 
     try {
       const [vec] = await this.provider.embed([q]);
-      const hits = await this.vectorDB.search(vec, 15);
+      const hits = await this.vectorDB.search(vec, 15, this.settings.importanceWeight);
 
       if (hits.length === 0) {
         this.statusEl.setText("No results.");
@@ -141,9 +145,10 @@ export class SearchView extends ItemView {
       // Snippet(s)
       for (const chunk of chunks.slice(0, 2)) {
         const snippetEl = card.createDiv("anamnesis-snippet");
-        if (chunk.heading) {
+        const contextLabel = chunk.context_path || chunk.heading;
+        if (contextLabel) {
           snippetEl.createEl("span", {
-            text: chunk.heading + " — ",
+            text: contextLabel + " — ",
             cls: "anamnesis-heading",
           });
         }
@@ -151,6 +156,12 @@ export class SearchView extends ItemView {
           text: this.truncate(chunk.text, 160),
           cls: "anamnesis-text",
         });
+        if (chunk.tags) {
+          snippetEl.createEl("span", {
+            text: " [" + chunk.tags + "]",
+            cls: "anamnesis-tags",
+          });
+        }
       }
     }
   }

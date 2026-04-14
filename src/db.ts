@@ -10,14 +10,21 @@ function getLanceDB(pluginDir: string): LanceDB {
   return _lancedb!;
 }
 
+/** Bump this whenever the ChunkRecord schema changes to trigger a re-index prompt. */
+export const SCHEMA_VERSION = "2";
+
 export interface ChunkRecord extends Record<string, unknown> {
-  id: string;           // "<file_path>:<chunk_index>"
+  id: string;              // "<file_path>:<chunk_index>"
   file_path: string;
-  heading: string;
+  heading: string;         // last heading seen (flat)
+  context_path: string;    // full heading hierarchy: "Infrastructure > Database > Migration"
   chunk_index: number;
-  last_modified: number; // Unix ms
-  text: string;
+  last_modified: number;   // Unix ms
+  text: string;            // raw chunk content (no breadcrumb)
   vector: number[];
+  tags: string;            // comma-separated YAML tags
+  importance_score: number; // backlink count; used for post-retrieval boosting
+  schema_version: string;  // matches SCHEMA_VERSION constant
 }
 
 export const CHUNKS_TABLE = "chunks";
@@ -53,16 +60,20 @@ export class VectorDB {
         id: "__seed__",
         file_path: "",
         heading: "",
+        context_path: "",
         chunk_index: 0,
         last_modified: 0,
         text: "",
         vector: new Array(this.vectorDim).fill(0),
+        tags: "",
+        importance_score: 0,
+        schema_version: SCHEMA_VERSION,
       },
     ];
 
     const table = await this.db.createTable(CHUNKS_TABLE, seed);
     await table.delete('id = "__seed__"');
-    console.log(`[Anamnesis] Created chunks table (dim=${this.vectorDim})`);
+    console.log(`[Anamnesis] Created chunks table (dim=${this.vectorDim}, schema=v${SCHEMA_VERSION})`);
     return table;
   }
 
@@ -94,6 +105,28 @@ export class VectorDB {
     return listType.listSize ?? null;
   }
 
+  /**
+   * Returns the schema_version stored in the table, or "1" if the column
+   * pre-dates versioning, or null if the table doesn't exist yet.
+   */
+  async getSchemaVersion(): Promise<string | null> {
+    if (!this.db) throw new Error("DB not connected");
+    const tableNames = await this.db.tableNames();
+    if (!tableNames.includes(CHUNKS_TABLE)) return null;
+
+    const table = await this.db.openTable(CHUNKS_TABLE);
+    const schema = await table.schema();
+
+    // If the schema_version column doesn't exist, this is a pre-v2 table
+    const hasVersionCol = schema.fields.some((f) => f.name === "schema_version");
+    if (!hasVersionCol) return "1";
+
+    // Read one row to get the stored version string
+    const rows = await table.query().limit(1).toArray();
+    if (rows.length === 0) return SCHEMA_VERSION; // empty table — treat as current
+    return String((rows[0] as any).schema_version ?? "1");
+  }
+
   async countRows(): Promise<number> {
     if (!this.db) return 0;
     const tableNames = await this.db.tableNames();
@@ -112,7 +145,8 @@ export class VectorDB {
 
   async search(
     vector: number[],
-    limit: number = 10
+    limit: number = 10,
+    importanceWeight: number = 0
   ): Promise<ChunkRecord[]> {
     if (!this.db) throw new Error("DB not connected");
     const table = await this.db.openTable(CHUNKS_TABLE);
@@ -120,7 +154,18 @@ export class VectorDB {
       .vectorSearch(vector)
       .limit(limit)
       .toArray();
-    return rows as unknown as ChunkRecord[];
+
+    if (importanceWeight <= 0) return rows as unknown as ChunkRecord[];
+
+    // Apply importance boost: lower _distance is better, so subtract the boost
+    return (rows as any[])
+      .map((r) => ({
+        ...r,
+        _boosted_score:
+          (r._distance ?? 1) -
+          importanceWeight * Math.log(1 + (r.importance_score ?? 0)),
+      }))
+      .sort((a, b) => a._boosted_score - b._boosted_score) as unknown as ChunkRecord[];
   }
 
   async close(): Promise<void> {
