@@ -1,4 +1,4 @@
-import { App, Menu, Notice, Plugin, PluginManifest } from "obsidian";
+import { App, Menu, Notice, Plugin, PluginManifest, setIcon } from "obsidian";
 import { join } from "path";
 import { VectorDB } from "./db";
 import { IndexingEngine, IndexStatus } from "./indexer";
@@ -10,6 +10,7 @@ import { OpenAIEmbeddingProvider } from "./embedding/openai";
 import { SearchView, SEARCH_VIEW_TYPE } from "./search-view";
 import { GraphView, GRAPH_VIEW_TYPE } from "./graph-view";
 import { AnamnesisPanel, PANEL_VIEW_TYPE } from "./panel-view";
+import { AnamnesisServerMCP } from "./mcp-server";
 
 export default class AnamnesisPlugin extends Plugin {
   settings!: PluginSettings;
@@ -18,7 +19,9 @@ export default class AnamnesisPlugin extends Plugin {
   private provider: EmbeddingProvider | null = null;
   private indexer: IndexingEngine | null = null;
   private watcher: VaultWatcher | null = null;
+  private mcpServer: AnamnesisServerMCP | null = null;
   private statusBarEl: HTMLElement | null = null;
+  private mcpStatusBarEl: HTMLElement | null = null;
   private currentStatus: IndexStatus = { state: "idle" };
 
   constructor(app: App, manifest: PluginManifest) {
@@ -41,6 +44,12 @@ export default class AnamnesisPlugin extends Plugin {
         onReindex: () => this.triggerFullIndex(),
         onOpenSearch: () => this.activateView(SEARCH_VIEW_TYPE, "right"),
         onOpenGraph: () => this.activateView(GRAPH_VIEW_TYPE, "tab"),
+        onFlushNow: () => this.watcher?.flushNow(),
+        onMcpStart: () => this.startMcpServer(),
+        onMcpStop: async () => {
+          await this.mcpServer?.stop();
+          this.setMcpStatus("stopped");
+        },
       });
     });
 
@@ -63,12 +72,20 @@ export default class AnamnesisPlugin extends Plugin {
       this.activateView(PANEL_VIEW_TYPE, "right");
     });
 
-    // Interactive status bar
+    // Interactive status bar — icon only, tooltip on hover
     this.statusBarEl = this.addStatusBarItem();
     this.statusBarEl.addClass("anamnesis-status-bar");
     this.statusBarEl.style.cursor = "pointer";
+    setIcon(this.statusBarEl, "database");
     this.statusBarEl.addEventListener("click", (e) => this.showStatusMenu(e));
     this.setStatus({ state: "idle" });
+
+    // MCP status dot — second icon in the status bar
+    this.mcpStatusBarEl = this.addStatusBarItem();
+    this.mcpStatusBarEl.addClass("anamnesis-mcp-status-bar");
+    this.mcpStatusBarEl.style.cursor = "pointer";
+    this.mcpStatusBarEl.addEventListener("click", (e) => this.showStatusMenu(e));
+    this.setMcpStatus("stopped");
 
     try {
       await this.initCore();
@@ -86,6 +103,8 @@ export default class AnamnesisPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(SEARCH_VIEW_TYPE);
     this.app.workspace.detachLeavesOfType(GRAPH_VIEW_TYPE);
     this.watcher?.stop();
+    this.provider?.terminate?.();
+    await this.mcpServer?.stop();
     await this.vectorDB?.close();
   }
 
@@ -99,6 +118,7 @@ export default class AnamnesisPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+    await this.syncMcpServer();
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
@@ -136,7 +156,7 @@ export default class AnamnesisPlugin extends Plugin {
     );
 
     if (this.settings.autoIndexOnChange) {
-      this.watcher = new VaultWatcher(this.app, this.indexer);
+      this.watcher = new VaultWatcher(this.app, this.indexer, this.settings);
       this.watcher.start();
     }
 
@@ -163,6 +183,12 @@ export default class AnamnesisPlugin extends Plugin {
       name: "Re-index entire vault",
       callback: () => this.triggerFullIndex(),
     });
+
+    // MCP server — start after core is ready so tools have a live DB + provider
+    if (this.settings.mcpEnabled) {
+      this.mcpServer = new AnamnesisServerMCP(this.vectorDB, this.provider, this.app);
+      await this.startMcpServer();
+    }
 
     console.log("[Anamnesis] Core initialized");
   }
@@ -207,6 +233,14 @@ export default class AnamnesisPlugin extends Plugin {
       menu.addItem((item) =>
         item.setTitle("Re-index vault").setIcon("database").onClick(() => this.triggerFullIndex())
       );
+    } else if (s.state === "queued") {
+      menu.addItem((item) =>
+        item.setTitle(`${s.count} file${s.count === 1 ? "" : "s"} queued — indexing soon`).setDisabled(true)
+      );
+      menu.addSeparator();
+      menu.addItem((item) =>
+        item.setTitle("Re-index vault now").setIcon("database").onClick(() => this.triggerFullIndex())
+      );
     } else {
       // idle
       menu.addItem((item) =>
@@ -215,6 +249,38 @@ export default class AnamnesisPlugin extends Plugin {
       menu.addItem((item) =>
         item.setTitle("Open control panel").setIcon("layout-dashboard")
           .onClick(() => this.activateView(PANEL_VIEW_TYPE, "right"))
+      );
+    }
+
+    // ── MCP section (always shown) ──────────────────────────────────────────
+    menu.addSeparator();
+    const mcpRunning = this.mcpServer?.status === "running";
+    if (mcpRunning) {
+      menu.addItem((item) =>
+        item
+          .setTitle(`MCP: port ${this.mcpServer!.port}`)
+          .setIcon("server")
+          .setDisabled(true)
+      );
+      menu.addItem((item) =>
+        item
+          .setTitle("Stop MCP server")
+          .setIcon("square")
+          .onClick(async () => {
+            await this.mcpServer?.stop();
+            this.setMcpStatus("stopped");
+          })
+      );
+    } else if (this.settings.mcpEnabled) {
+      menu.addItem((item) =>
+        item
+          .setTitle("Start MCP server")
+          .setIcon("play")
+          .onClick(() => this.startMcpServer())
+      );
+    } else {
+      menu.addItem((item) =>
+        item.setTitle("MCP: Disabled").setIcon("server").setDisabled(true)
       );
     }
 
@@ -269,27 +335,103 @@ export default class AnamnesisPlugin extends Plugin {
     }
 
     if (!this.statusBarEl) return;
+    let tooltip: string;
+    let color: string;
+
     switch (status.state) {
       case "idle":
-        this.statusBarEl.setText("Anamnesis: Ready");
-        this.statusBarEl.style.color = "";
+        tooltip = "Anamnesis: Ready";
+        color = "";
+        break;
+      case "queued":
+        tooltip = `Anamnesis: ${status.count} file${status.count === 1 ? "" : "s"} queued`;
+        color = "var(--color-blue)";
         break;
       case "indexing":
-        this.statusBarEl.setText(
-          status.label && status.total === 0
-            ? `Anamnesis: ${status.label}`
-            : `Anamnesis: ${status.current}/${status.total}`
-        );
-        this.statusBarEl.style.color = "var(--color-yellow)";
+        tooltip = status.label && status.total === 0
+          ? `Anamnesis: ${status.label}`
+          : `Anamnesis: Indexing ${status.current}/${status.total}`;
+        color = "var(--color-yellow)";
         break;
       case "paused":
-        this.statusBarEl.setText(`Anamnesis: Paused (${status.current}/${status.total})`);
-        this.statusBarEl.style.color = "var(--color-orange)";
+        tooltip = `Anamnesis: Paused (${status.current}/${status.total})`;
+        color = "var(--color-orange)";
         break;
       case "error":
-        this.statusBarEl.setText("Anamnesis: Error");
-        this.statusBarEl.style.color = "var(--color-red)";
+        tooltip = `Anamnesis: Error — ${status.message}`;
+        color = "var(--color-red)";
         break;
+    }
+
+    this.statusBarEl.title = tooltip;
+    this.statusBarEl.style.color = color;
+  }
+
+  private setMcpStatus(status: "stopped" | "running" | "error"): void {
+    if (!this.mcpStatusBarEl) return;
+
+    // Push to any open panels
+    const panels = this.app.workspace.getLeavesOfType(PANEL_VIEW_TYPE);
+    for (const leaf of panels) {
+      if (leaf.view instanceof AnamnesisPanel) leaf.view.updateMcpStatus(status, this.mcpServer?.port ?? 0);
+    }
+
+    const port = this.mcpServer?.port ?? 0;
+    switch (status) {
+      case "running":
+        this.mcpStatusBarEl.title = `MCP: Listening on port ${port}`;
+        this.mcpStatusBarEl.style.color = "var(--color-green)";
+        break;
+      case "error":
+        this.mcpStatusBarEl.title = `MCP: Error — ${this.mcpServer?.error ?? "unknown"}`;
+        this.mcpStatusBarEl.style.color = "var(--color-red)";
+        break;
+      default:
+        this.mcpStatusBarEl.title = "MCP: Not running";
+        this.mcpStatusBarEl.style.color = "";
+        break;
+    }
+  }
+
+  private async startMcpServer(): Promise<void> {
+    if (!this.vectorDB || !this.provider) return;
+    // Create the server lazily — it may not exist if mcpEnabled was off at startup
+    if (!this.mcpServer) {
+      this.mcpServer = new AnamnesisServerMCP(this.vectorDB, this.provider, this.app);
+    }
+    try {
+      await this.mcpServer.start(this.settings.mcpPort);
+      this.setMcpStatus("running");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[Anamnesis] MCP server failed to start:", msg);
+      new Notice(`[Anamnesis] MCP server error: ${msg}`, 8000);
+      this.setMcpStatus("error");
+    }
+  }
+
+  /** Called on saveSettings — restart MCP if enabled/port changed. */
+  private async syncMcpServer(): Promise<void> {
+    if (!this.vectorDB || !this.provider) return; // core not ready yet
+
+    if (!this.settings.mcpEnabled) {
+      await this.mcpServer?.stop();
+      this.setMcpStatus("stopped");
+      this.mcpServer = null;
+      return;
+    }
+
+    // Enabled — create server if needed, restart if port changed
+    const portChanged = this.mcpServer?.port !== this.settings.mcpPort;
+    const wasRunning = this.mcpServer?.status === "running";
+
+    if (!this.mcpServer) {
+      this.mcpServer = new AnamnesisServerMCP(this.vectorDB, this.provider, this.app);
+    }
+
+    if (!wasRunning || portChanged) {
+      if (wasRunning) await this.mcpServer.stop();
+      await this.startMcpServer();
     }
   }
 }

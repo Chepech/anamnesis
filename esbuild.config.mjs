@@ -97,8 +97,8 @@ const patchTransformersEnvPlugin = {
   },
 };
 
-const context = await esbuild.context({
-  entryPoints: ["src/main.ts"],
+// Shared config — both builds use the same plugin set and externals
+const sharedConfig = {
   bundle: true,
   plugins: [nativeStubPlugin, patchTransformersOnnxPlugin, patchTransformersEnvPlugin],
   external: [
@@ -127,14 +127,27 @@ const context = await esbuild.context({
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,
-  outfile: "main.js",
   platform: "node",
   mainFields: ["main", "module"],
+};
+
+// Main plugin bundle
+const mainContext = await esbuild.context({
+  ...sharedConfig,
+  entryPoints: ["src/main.ts"],
+  outfile: "main.js",
+});
+
+// Embedder Web Worker — separate bundle so @xenova/transformers runs off-thread
+const workerContext = await esbuild.context({
+  ...sharedConfig,
+  entryPoints: ["src/embedding/embedder-worker.ts"],
+  outfile: "embedder-worker.js",
 });
 
 if (prod) {
-  await context.rebuild();
+  await Promise.all([mainContext.rebuild(), workerContext.rebuild()]);
   process.exit(0);
 } else {
-  await context.watch();
+  await Promise.all([mainContext.watch(), workerContext.watch()]);
 }

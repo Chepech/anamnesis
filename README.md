@@ -12,6 +12,34 @@ Anamnesis is an Obsidian plugin that turns your vault into a queryable semantic 
 - **Semantic search** — find notes by concept, not exact wording. Ask "what did I write about decision fatigue?" and it finds relevant passages even if those words don't appear.
 - **Vector graph** — a 2D map of your entire vault's semantic space, where proximity means conceptual similarity.
 - **MCP server** *(planned)* — exposes retrieval tools to AI agents like Claude Code so they can query your vault as a knowledge source during conversations.
+---
+ Full Re-index (indexAll)
+
+  Triggered manually via the Re-index button or command. Destructive replace — it calls db.dropTable()
+   first, wiping the entire LanceDB table, then rebuilds from scratch by walking every indexable file
+  in the vault. There is no diffing or merging. The mtime cache is also cleared at the start, so
+  nothing is skipped.
+
+  This is the only way to guarantee consistency, but it's expensive on large vaults.
+
+  ---
+  Incremental Update (indexFile / deleteFile)
+
+  Triggered by the VaultWatcher on individual file events (create, modify, rename, delete), debounced
+  500ms.
+
+  For a modified file (indexFile):
+  1. Check the in-memory mtime cache — if the file's stat.mtime hasn't changed since last time, skip
+  entirely (no LanceDB call)
+  2. If changed: run table.delete('file_path = "..."') to remove all existing chunks for that file
+  3. Re-chunk and re-embed the new content
+  4. table.add(records) with the fresh chunks
+  5. Update the mtime cache
+
+  For a deleted/renamed file (deleteFile):
+  - Just table.delete('file_path = "..."') and evict from the mtime cache. A rename triggers a delete
+  on the old path and indexFile on the new one.
+
 
 ---
 

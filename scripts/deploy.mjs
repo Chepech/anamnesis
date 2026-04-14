@@ -30,7 +30,7 @@ const pluginModules = join(pluginDir, "node_modules");
 mkdirSync(pluginDir, { recursive: true });
 
 // ── Core plugin files ──────────────────────────────────────────────────────
-for (const file of ["main.js", "manifest.json", "styles.css"]) {
+for (const file of ["main.js", "embedder-worker.js", "manifest.json", "styles.css"]) {
   const src = join(root, file);
   if (!existsSync(src)) {
     console.error(`Missing: ${src} — run npm run build first`);

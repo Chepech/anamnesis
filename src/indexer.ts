@@ -6,6 +6,7 @@ import type { PluginSettings } from "./settings";
 
 export type IndexStatus =
   | { state: "idle" }
+  | { state: "queued"; count: number; flushAt: number; delayMs: number }
   | { state: "indexing"; current: number; total: number; label?: string }
   | { state: "paused"; current: number; total: number }
   | { state: "error"; message: string };
@@ -118,6 +119,67 @@ export class IndexingEngine {
     } finally {
       this._running = false;
       this._paused = false;
+      this._cancelled = false;
+    }
+  }
+
+  /** Called by VaultWatcher to reflect pending queue size in the UI. */
+  setQueued(count: number, flushAt = 0, delayMs = 0): void {
+    if (count <= 0) {
+      if (!this._running) this.onStatus({ state: "idle" });
+    } else {
+      this.onStatus({ state: "queued", count, flushAt, delayMs });
+    }
+  }
+
+  /** Index a specific batch of file paths (called after the watcher flush timer fires). */
+  async indexFiles(paths: string[]): Promise<void> {
+    if (this._running) {
+      // indexAll is already running — it will cover these files
+      console.log("[Anamnesis] indexFiles skipped — indexAll in progress");
+      return;
+    }
+
+    const files: TFile[] = [];
+    for (const path of paths) {
+      const f = this.app.vault.getAbstractFileByPath(path);
+      if (f instanceof TFile) files.push(f);
+    }
+
+    if (files.length === 0) {
+      this.onStatus({ state: "idle" });
+      return;
+    }
+
+    this._running = true;
+    this._cancelled = false;
+    const total = files.length;
+    this.onStatus({ state: "indexing", current: 0, total,
+      label: `${total} file${total === 1 ? "" : "s"}` });
+
+    try {
+      const table = await this.db.openTable();
+      let processed = 0;
+
+      for (const file of files) {
+        if (this._cancelled) break;
+        this.onStatus({ state: "indexing", current: processed, total, label: file.basename });
+
+        await table.delete(`file_path = "${escape(file.path)}"`);
+        const records = await this.fileToRecords(file);
+        if (records.length > 0) await table.add(records);
+        this.mtimeCache.set(file.path, file.stat.mtime);
+        processed++;
+      }
+
+      console.log(`[Anamnesis] Batch indexed ${processed} file(s)`);
+      this.onStatus({ state: "idle" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[Anamnesis] indexFiles failed:", message);
+      this.onStatus({ state: "error", message });
+    } finally {
+      this._running = false;
       this._cancelled = false;
     }
   }

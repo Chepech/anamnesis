@@ -12,6 +12,16 @@ export interface PluginSettings {
   autoIndexOnChange: boolean;
   /** Dimension of the currently indexed vectors — used to detect model switches. */
   indexedVectorDim: number;
+  /**
+   * How aggressively to process file changes.
+   * conservative: 30s delay — batches many edits into one pass.
+   * aggressive:   5s delay  — picks up changes quickly at the cost of more writes.
+   */
+  indexingStrategy: "conservative" | "aggressive";
+  /** Whether to run the local MCP server. */
+  mcpEnabled: boolean;
+  /** Port the MCP HTTP server listens on (127.0.0.1 only). */
+  mcpPort: number;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -24,6 +34,9 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   excludePatterns: ".obsidian\nnode_modules\nArchives",
   autoIndexOnChange: true,
   indexedVectorDim: 0, // 0 means no index yet
+  indexingStrategy: "conservative",
+  mcpEnabled: false,
+  mcpPort: 8868,
 };
 
 export class AnamnesisSettingTab extends PluginSettingTab {
@@ -118,6 +131,24 @@ export class AnamnesisSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName("Indexing strategy")
+      .setDesc(
+        "Conservative (30 s): waits 30 seconds after the last change before writing to the index — " +
+        "great for heavy editing sessions. " +
+        "Aggressive (5 s): picks up changes within 5 seconds at the cost of more frequent writes."
+      )
+      .addDropdown((drop) =>
+        drop
+          .addOption("conservative", "Conservative — 30 s delay")
+          .addOption("aggressive", "Aggressive — 5 s delay")
+          .setValue(this.plugin.settings.indexingStrategy)
+          .onChange(async (value: string) => {
+            this.plugin.settings.indexingStrategy = value as "conservative" | "aggressive";
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName("Chunk size")
       .setDesc("Max characters per chunk (default 512).")
       .addText((text) =>
@@ -158,6 +189,69 @@ export class AnamnesisSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+
+    // ── MCP Server ──────────────────────────────────────────────────────────
+    containerEl.createEl("h3", { text: "MCP Server" });
+
+    new Setting(containerEl)
+      .setName("Enable MCP server")
+      .setDesc(
+        "Starts a local HTTP server so Claude Desktop (and other MCP clients) can " +
+        "search your vault in real time. Bound to 127.0.0.1 — not accessible over the network."
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.mcpEnabled)
+          .onChange(async (value: boolean) => {
+            this.plugin.settings.mcpEnabled = value;
+            await this.plugin.saveSettings();
+            this.display();
+          })
+      );
+
+    if (this.plugin.settings.mcpEnabled) {
+      new Setting(containerEl)
+        .setName("Port")
+        .setDesc("Restart the plugin after changing the port.")
+        .addText((text) =>
+          text
+            .setValue(String(this.plugin.settings.mcpPort))
+            .onChange(async (value: string) => {
+              const n = parseInt(value, 10);
+              if (!isNaN(n) && n >= 1024 && n <= 65535) {
+                this.plugin.settings.mcpPort = n;
+                await this.plugin.saveSettings();
+              }
+            })
+        );
+
+      // Claude Desktop config snippet
+      const port = this.plugin.settings.mcpPort;
+      const snippet = JSON.stringify(
+        { mcpServers: { anamnesis: { url: `http://localhost:${port}/mcp` } } },
+        null,
+        2
+      );
+      const snippetSetting = new Setting(containerEl)
+        .setName("Claude Desktop config")
+        .setDesc("Add this to claude_desktop_config.json under mcpServers:")
+        .addButton((btn) =>
+          btn
+            .setIcon("copy")
+            .setTooltip("Copy to clipboard")
+            .onClick(async () => {
+              await navigator.clipboard.writeText(snippet);
+              btn.setIcon("check");
+              btn.buttonEl.style.color = "var(--color-green)";
+              setTimeout(() => {
+                btn.setIcon("copy");
+                btn.buttonEl.style.color = "";
+              }, 2000);
+            })
+        );
+      const pre = snippetSetting.settingEl.createEl("pre", { cls: "anamnesis-mcp-snippet" });
+      pre.setText(snippet);
+    }
 
     // ── Actions ─────────────────────────────────────────────────────────────
     containerEl.createEl("h3", { text: "Actions" });
