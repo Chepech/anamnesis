@@ -125,11 +125,30 @@ The config snippet (with copy button) is available directly in plugin settings.
 
 ## Setup
 
-1. Build: `npm run build`
-2. Deploy to vault: `node scripts/deploy.mjs "path/to/vault"`
-3. Enable the plugin in Obsidian → Settings → Community plugins
-4. The plugin loads the embedding model on first run (~23 MB download, cached locally)
+### Community Plugin (recommended)
+
+1. Open Obsidian → Settings → Community plugins → Browse
+2. Search for **Anamnesis** and install
+3. Enable the plugin
+4. The embedding model downloads on first run (~23 MB, cached locally after that)
 5. Click **Re-index vault** to build the initial index
+
+### Manual Install
+
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/Chepech/anamnesis/releases)
+2. Copy them to `<vault>/.obsidian/plugins/anamnesis/`
+3. Enable the plugin in Obsidian → Settings → Community plugins
+4. Click **Re-index vault**
+
+### Build from Source
+
+```sh
+git clone https://github.com/Chepech/anamnesis
+cd anamnesis
+npm install
+npm run build
+node scripts/deploy.mjs "path/to/your/vault"
+```
 
 ---
 
@@ -150,6 +169,19 @@ The config snippet (with copy button) is available directly in plugin settings.
 | MCP port | 8868 | Port the MCP server listens on (127.0.0.1 only). |
 
 Changing the embedding model or triggering a schema update (new plugin version) requires a full re-index. The plugin will display a notice on load and suppress the background watcher until re-indexing is complete.
+
+---
+
+## Privacy & Data
+
+By default Anamnesis runs **entirely offline**. The local embedding provider (all-MiniLM-L6-v2 / all-mpnet-base-v2) downloads once from Hugging Face (~23–90 MB) and runs inside Obsidian via ONNX Runtime. No note content ever leaves your device when using the local provider.
+
+**OpenAI provider (optional):** if you switch to the OpenAI embedding provider in settings, your note content is sent to the [OpenAI Embeddings API](https://platform.openai.com/docs/guides/embeddings) to compute vectors. Specifically:
+- Text chunks of your notes (up to 512 characters each) are transmitted to `api.openai.com` on every index and re-index.
+- OpenAI does not store API inputs by default (see [OpenAI data usage policies](https://openai.com/policies/api-data-usage-policies)), but your content is processed on their servers.
+- Your API key is stored locally in Obsidian's plugin data and is never sent anywhere except to OpenAI's API endpoint.
+
+The MCP server binds to `127.0.0.1` only and is not accessible outside your local machine.
 
 ---
 
