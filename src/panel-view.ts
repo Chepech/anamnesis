@@ -88,6 +88,7 @@ export class AnamnesisPanel extends ItemView {
 
   updateMcpStatus(status: "stopped" | "running" | "error", port: number): void {
     this.mcpDotEl.className = "anamnesis-status-dot";
+    this.mcpDotEl.style.background = ""; // clear any previous inline override
 
     // Always reflect the current port and URL
     const displayPort = port > 0 ? port : this.settings.mcpPort;
@@ -108,8 +109,7 @@ export class AnamnesisPanel extends ItemView {
         this.mcpStopBtn.disabled = true;
         break;
       default:
-        this.mcpDotEl.addClass("anamnesis-dot-idle");
-        this.mcpDotEl.style.background = "var(--text-faint)";
+        // base .anamnesis-status-dot already provides var(--text-faint) gray
         this.mcpTextEl.setText("Not running");
         this.mcpStartBtn.disabled = false;
         this.mcpStopBtn.disabled = true;

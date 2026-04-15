@@ -23,6 +23,7 @@ export default class AnamnesisPlugin extends Plugin {
   private statusBarEl: HTMLElement | null = null;
   private mcpStatusBarEl: HTMLElement | null = null;
   private currentStatus: IndexStatus = { state: "idle" };
+  private currentMcpStatus: "stopped" | "running" | "error" = "stopped";
 
   constructor(app: App, manifest: PluginManifest) {
     super(app, manifest);
@@ -84,6 +85,7 @@ export default class AnamnesisPlugin extends Plugin {
     this.mcpStatusBarEl = this.addStatusBarItem();
     this.mcpStatusBarEl.addClass("anamnesis-mcp-status-bar");
     this.mcpStatusBarEl.style.cursor = "pointer";
+    setIcon(this.mcpStatusBarEl, "server");
     this.mcpStatusBarEl.addEventListener("click", (e) => this.showStatusMenu(e));
     this.setMcpStatus("stopped");
 
@@ -114,10 +116,14 @@ export default class AnamnesisPlugin extends Plugin {
       return;
     }
     await this.indexer.indexAll();
+    // Watcher may have been skipped at init due to a schema/dim mismatch.
+    // Now that the index is rebuilt, start it if enabled and not already running.
+    this.syncWatcher();
   }
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+    this.syncWatcher();
     await this.syncMcpServer();
   }
 
@@ -211,6 +217,7 @@ export default class AnamnesisPlugin extends Plugin {
     const existing = this.app.workspace.getLeavesOfType(type);
     if (existing.length > 0) {
       this.app.workspace.revealLeaf(existing[0]);
+      this.syncPanelMcpState();
       return;
     }
     const leaf = where === "tab"
@@ -219,6 +226,17 @@ export default class AnamnesisPlugin extends Plugin {
     if (!leaf) return;
     await leaf.setViewState({ type, active: true });
     this.app.workspace.revealLeaf(leaf);
+    this.syncPanelMcpState();
+  }
+
+  /** Push the current MCP status to any open panel so it always reflects reality. */
+  private syncPanelMcpState(): void {
+    const panels = this.app.workspace.getLeavesOfType(PANEL_VIEW_TYPE);
+    for (const leaf of panels) {
+      if (leaf.view instanceof AnamnesisPanel) {
+        leaf.view.updateMcpStatus(this.currentMcpStatus, this.mcpServer?.port ?? 0);
+      }
+    }
   }
 
   private showStatusMenu(evt: MouseEvent): void {
@@ -383,6 +401,7 @@ export default class AnamnesisPlugin extends Plugin {
 
   private setMcpStatus(status: "stopped" | "running" | "error"): void {
     if (!this.mcpStatusBarEl) return;
+    this.currentMcpStatus = status;
 
     // Push to any open panels
     const panels = this.app.workspace.getLeavesOfType(PANEL_VIEW_TYPE);
@@ -421,6 +440,19 @@ export default class AnamnesisPlugin extends Plugin {
       console.error("[Anamnesis] MCP server failed to start:", msg);
       new Notice(`[Anamnesis] MCP server error: ${msg}`, 8000);
       this.setMcpStatus("error");
+    }
+  }
+
+  /** Start or stop the watcher based on current settings and indexer state. */
+  private syncWatcher(): void {
+    if (!this.indexer) return; // core not ready yet
+    if (this.settings.autoIndexOnChange) {
+      if (!this.watcher) {
+        this.watcher = new VaultWatcher(this.app, this.indexer, this.settings);
+      }
+      if (!this.watcher.isRunning) this.watcher.start();
+    } else {
+      if (this.watcher?.isRunning) this.watcher.stop();
     }
   }
 

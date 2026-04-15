@@ -30,6 +30,8 @@ export class VaultWatcher {
     this.settings = settings;
   }
 
+  get isRunning(): boolean { return this.unregister.length > 0; }
+
   start(): void {
     const onModify = this.app.vault.on("modify", (file) => {
       if (file instanceof TFile && file.extension === "md") this.enqueueModify(file.path);

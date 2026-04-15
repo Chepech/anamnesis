@@ -25,7 +25,6 @@ export class AnamnesisServerMCP {
   private provider: EmbeddingProvider;
   private app: App;
 
-  private mcpServer: McpServer;
   private httpServer: http.Server | null = null;
   private _status: McpStatus = "stopped";
   private _port = 0;
@@ -35,9 +34,6 @@ export class AnamnesisServerMCP {
     this.db = db;
     this.provider = provider;
     this.app = app;
-
-    this.mcpServer = new McpServer({ name: "Anamnesis", version: "1.0.0" });
-    this.registerTools();
   }
 
   get status(): McpStatus { return this._status; }
@@ -68,7 +64,8 @@ export class AnamnesisServerMCP {
         return;
       }
 
-      // Each request gets its own stateless transport instance
+      // Stateless streamable HTTP requires a fresh protocol + transport pair per request.
+      const mcpServer = this.createMcpServer();
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined, // stateless
       });
@@ -76,7 +73,7 @@ export class AnamnesisServerMCP {
       res.on("close", () => transport.close());
 
       try {
-        await this.mcpServer.connect(transport);
+        await mcpServer.connect(transport);
         const body = await readBody(req);
         await transport.handleRequest(req, res, body);
       } catch (err) {
@@ -105,6 +102,9 @@ export class AnamnesisServerMCP {
 
   async stop(): Promise<void> {
     if (!this.httpServer) return;
+    // closeAllConnections() tears down keep-alive sockets immediately so that
+    // close() can fire its callback without waiting for idle connections to time out.
+    this.httpServer.closeAllConnections();
     await new Promise<void>((resolve) => {
       this.httpServer!.close(() => resolve());
     });
@@ -115,9 +115,11 @@ export class AnamnesisServerMCP {
 
   // ── Tools ──────────────────────────────────────────────────────────────────
 
-  private registerTools(): void {
+  private createMcpServer(): McpServer {
+    const mcpServer = new McpServer({ name: "Anamnesis", version: "1.0.0" });
+
     // ── search_vault ─────────────────────────────────────────────────────────
-    this.mcpServer.tool(
+    mcpServer.tool(
       "search_vault",
       "Semantic search over the Obsidian vault. Returns the most relevant chunks " +
         "ranked by cosine similarity to the query.",
@@ -157,7 +159,7 @@ export class AnamnesisServerMCP {
     );
 
     // ── read_note ─────────────────────────────────────────────────────────────
-    this.mcpServer.tool(
+    mcpServer.tool(
       "read_note",
       "Read the full current content of a vault note by its vault-relative path.",
       {
@@ -187,7 +189,7 @@ export class AnamnesisServerMCP {
     );
 
     // ── list_indexed_files ────────────────────────────────────────────────────
-    this.mcpServer.tool(
+    mcpServer.tool(
       "list_indexed_files",
       "List all files currently in the Anamnesis vector index, with their chunk counts.",
       {},
@@ -208,6 +210,8 @@ export class AnamnesisServerMCP {
         };
       }
     );
+
+    return mcpServer;
   }
 }
 
