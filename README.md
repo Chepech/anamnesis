@@ -16,6 +16,57 @@ Anamnesis is an Obsidian plugin that turns your vault into a queryable semantic 
 
 ---
 
+## Getting Started
+
+### Why this plugin requires a build step
+
+Anamnesis depends on two components that cannot be bundled into a single `main.js`:
+
+- **LanceDB** — a native Rust addon (`.node` binary). npm automatically picks the right binary for your OS and architecture when you run `npm install`.
+- **ONNX Runtime WASM** — several `.wasm` files that the local embedding model loads at runtime via `file://` URLs.
+
+Because of this, the standard Obsidian plugin install (community directory or manual copy of `main.js` + `manifest.json`) will not work on its own. You need to build from source so that `npm install` fetches the correct native binary for your platform and the deploy script places everything in the right layout.
+
+### Supported platforms
+
+| Platform | Architecture | Status |
+|---|---|---|
+| Windows | x64 | Tested |
+| macOS | x64, arm64 (Apple Silicon) | Binaries available, untested |
+| Linux | x64, arm64 | Binaries available, untested |
+
+### Install (build from source)
+
+**Requirements:** Node.js 18+ and npm.
+
+```sh
+git clone https://github.com/Chepech/anamnesis
+cd anamnesis
+npm install
+npm run build
+```
+
+Then deploy to your vault:
+
+```sh
+# Windows
+node scripts/deploy.mjs "C:/path/to/your/vault"
+
+# macOS / Linux — edit scripts/deploy.mjs first:
+# Replace "@lancedb/lancedb-win32-x64-msvc" with the package that matches your platform:
+#   macOS Apple Silicon:  @lancedb/lancedb-darwin-arm64
+#   macOS Intel:          @lancedb/lancedb-darwin-x64
+#   Linux x64:            @lancedb/lancedb-linux-x64-gnu
+#   Linux arm64:          @lancedb/lancedb-linux-arm64-gnu
+node scripts/deploy.mjs "/path/to/your/vault"
+```
+
+Then enable the plugin in Obsidian → Settings → Community plugins and click **Re-index vault**.
+
+> The model download (~23 MB for the default `all-MiniLM-L6-v2`) happens on first run and is cached locally after that.
+
+---
+
 ## Indexing Pipeline
 
 ### Context-Aware Chunking
@@ -125,30 +176,7 @@ The config snippet (with copy button) is available directly in plugin settings.
 
 ## Setup
 
-### Community Plugin (recommended)
-
-1. Open Obsidian → Settings → Community plugins → Browse
-2. Search for **Anamnesis** and install
-3. Enable the plugin
-4. The embedding model downloads on first run (~23 MB, cached locally after that)
-5. Click **Re-index vault** to build the initial index
-
-### Manual Install
-
-1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/Chepech/anamnesis/releases)
-2. Copy them to `<vault>/.obsidian/plugins/anamnesis/`
-3. Enable the plugin in Obsidian → Settings → Community plugins
-4. Click **Re-index vault**
-
-### Build from Source
-
-```sh
-git clone https://github.com/Chepech/anamnesis
-cd anamnesis
-npm install
-npm run build
-node scripts/deploy.mjs "path/to/your/vault"
-```
+See [Getting Started](#getting-started) above — build from source is required for all platforms. The deploy script handles the full layout including native binaries and WASM files.
 
 ---
 
