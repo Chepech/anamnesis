@@ -278,11 +278,13 @@ export default class AnamnesisPlugin extends Plugin {
       menu.addItem((item) =>
         item.setTitle("Re-index vault").setIcon("database").onClick(() => this.triggerFullIndex())
       );
-      menu.addItem((item) =>
-        item.setTitle("Open control panel").setIcon("layout-dashboard")
-          .onClick(() => this.activateView(PANEL_VIEW_TYPE, "right"))
-      );
     }
+
+    // Always available regardless of indexing state
+    menu.addItem((item) =>
+      item.setTitle("Open control panel").setIcon("layout-dashboard")
+        .onClick(() => this.activateView(PANEL_VIEW_TYPE, "right"))
+    );
 
     // ── MCP section (always shown) ──────────────────────────────────────────
     menu.addSeparator();
