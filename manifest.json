@@ -3,7 +3,7 @@
   "name": "Anamnesis",
   "version": "1.0.0",
   "minAppVersion": "1.4.0",
-  "description": "Semantic search, vector graph, and MCP server for your vault. Indexes notes locally using embeddings so AI agents can query your knowledge base.",
+  "description": "Turn your vault into a searchable knowledge base with local embeddings and an MCP server.",
   "author": "Chepech",
   "authorUrl": "https://github.com/Chepech",
   "isDesktopOnly": true
