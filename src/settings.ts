@@ -94,6 +94,11 @@ export class AnamnesisSettingTab extends PluginSettingTab {
     }
 
     if (this.plugin.settings.embeddingProvider === "openai") {
+      const warning = containerEl.createDiv({ cls: "anamnesis-openai-warning" });
+      warning.createEl("span", {
+        text: "⚠ Privacy: when using the OpenAI provider, your note content (in chunks of up to 512 characters) is sent to the OpenAI Embeddings API to compute vectors. Nothing is stored on their servers by default, but your text is processed there. The local provider (default) makes no network requests.",
+      });
+
       new Setting(containerEl)
         .setName("OpenAI API key")
         .setDesc("Stored in plugin data, never synced.")

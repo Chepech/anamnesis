@@ -1,5 +1,6 @@
 node_modules/
 main.js
+embedder-worker.js
 *.js.map
 data/
 .DS_Store
