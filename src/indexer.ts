@@ -57,6 +57,14 @@ export class IndexingEngine {
   // mtime cache for deduplication
   private mtimeCache: Map<string, number> = new Map();
 
+  // Live queue for indexAll — allows watcher to inject files mid-run
+  private _indexQueue: TFile[] = [];
+  private _indexQueuePaths: Set<string> = new Set();
+
+  // Progress state shared with fileToRecords for inter-batch pause responsiveness
+  private _indexingCurrent = 0;
+  private _indexingTotal   = 0;
+
   constructor(
     app: App,
     db: VectorDB,
@@ -78,88 +86,165 @@ export class IndexingEngine {
   pause(): void {
     if (!this._running || this._paused) return;
     this._paused = true;
+    console.log("[Anamnesis][DEBUG] pause() called — _paused set to true");
   }
 
   resume(): void {
     if (!this._paused) return;
     this._paused = false;
+    console.log("[Anamnesis][DEBUG] resume() called — resolving pause promise");
     this._pauseResolve?.();
     this._pauseResolve = null;
   }
 
   cancel(): void {
+    console.log("[Anamnesis][DEBUG] cancel() called");
     this._cancelled = true;
     this.resume(); // unblock if waiting on pause
   }
 
-  async indexAll(): Promise<void> {
+  /**
+   * Full vault reindex. Returns true on normal completion, false on error or cancellation.
+   * Uses a live mutable queue so files changed by the watcher mid-run are included
+   * in the same pass rather than being silently dropped.
+   */
+  async indexAll(): Promise<boolean> {
     if (this._running) {
       console.warn("[Anamnesis] indexAll already running, skipping");
-      return;
+      return false;
     }
     this._running = true;
     this._paused = false;
     this._cancelled = false;
     this.mtimeCache.clear();
 
+    let success = false;
+
     try {
       await this.db.dropTable();
       const table = await this.db.ensureTable();
 
-      const files = this.getIndexableFiles();
-      const total = files.length;
-      console.log(`[Anamnesis] Starting full index: ${total} files`);
-      this.onStatus({ state: "indexing", current: 0, total });
+      // Initialise the live queue from the current vault snapshot
+      this._indexQueue = this.getIndexableFiles();
+      this._indexQueuePaths = new Set(this._indexQueue.map(f => f.path));
+      const initialTotal = this._indexQueue.length;
+      console.log(`[Anamnesis] Starting full index: ${initialTotal} files`);
+      this.onStatus({ state: "indexing", current: 0, total: initialTotal });
 
       let processed = 0;
+      this._indexingCurrent = 0;
+      this._indexingTotal   = initialTotal;
 
-      for (const file of files) {
-        // Pause checkpoint
+      while (this._indexQueue.length > 0) {
+        const file = this._indexQueue.shift()!;
+        this._indexQueuePaths.delete(file.path);
+
+        const currentTotal = processed + this._indexQueue.length;
+        this._indexingTotal = currentTotal;
+
+        // ── Pause checkpoint ────────────────────────────────────────────────
         if (this._paused) {
-          this.onStatus({ state: "paused", current: processed, total });
-          await new Promise<void>((resolve) => { this._pauseResolve = resolve; });
+          console.log(`[Anamnesis][DEBUG] Pause checkpoint hit before file: ${file.basename} (${processed}/${currentTotal})`);
+          this.onStatus({ state: "paused", current: processed, total: currentTotal });
+          await new Promise<void>(resolve => { this._pauseResolve = resolve; });
+          console.log("[Anamnesis][DEBUG] Resumed from pause checkpoint");
         }
 
-        if (this._cancelled) break;
+        if (this._cancelled) {
+          console.log("[Anamnesis][DEBUG] Cancelled at file loop checkpoint");
+          break;
+        }
 
-        this.onStatus({ state: "indexing", current: processed, total, label: file.basename });
+        // ── File existence check ─────────────────────────────────────────────
+        // File may have been deleted or moved while this loop was running
+        const stillExists = this.app.vault.getAbstractFileByPath(file.path) instanceof TFile;
+        if (!stillExists) {
+          console.warn(`[Anamnesis] Skipping "${file.basename}" — no longer in vault (deleted/moved mid-reindex)`);
+          processed++;
+          this._indexingCurrent = processed;
+          continue;
+        }
 
-        const records = await this.fileToRecords(file);
-        if (records.length > 0) await table.add(records);
-        this.mtimeCache.set(file.path, file.stat.mtime);
+        this.onStatus({ state: "indexing", current: processed, total: currentTotal, label: file.basename });
+        this._indexingCurrent = processed;
+
+        try {
+          const records = await this.fileToRecords(file);
+          if (records.length > 0) await table.add(records);
+          this.mtimeCache.set(file.path, file.stat.mtime);
+        } catch (err) {
+          console.warn(`[Anamnesis] Skipping "${file.basename}" due to read error:`, err);
+        }
+
         processed++;
+        this._indexingCurrent = processed;
 
-        if (processed % 25 === 0) console.log(`[Anamnesis] Indexed ${processed}/${total}`);
+        if (processed % 25 === 0) {
+          console.log(`[Anamnesis] Indexed ${processed} / ${processed + this._indexQueue.length} (queue remaining: ${this._indexQueue.length})`);
+        }
       }
 
-      this._lastIndexedCount = processed;
-      console.log(`[Anamnesis] Full index complete: ${processed} files`);
-      this.onStatus({ state: "idle" });
+      if (!this._cancelled) {
+        this._lastIndexedCount = processed;
+        console.log(`[Anamnesis] Full index complete: ${processed} files processed`);
+        this.onStatus({ state: "idle" });
+        success = true;
+      } else {
+        console.log(`[Anamnesis][DEBUG] indexAll cancelled after ${processed} files`);
+        this.onStatus({ state: "idle" });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("[Anamnesis] indexAll failed:", message);
       this.onStatus({ state: "error", message });
     } finally {
+      // Always clear the live queue so stale state doesn't leak into the next run
+      this._indexQueue = [];
+      this._indexQueuePaths.clear();
       this._running = false;
       this._paused = false;
       this._cancelled = false;
+      console.log(`[Anamnesis][DEBUG] indexAll finished — success=${success}`);
     }
+
+    return success;
   }
 
   /** Called by VaultWatcher to reflect pending queue size in the UI. */
   setQueued(count: number, flushAt = 0, delayMs = 0): void {
+    // Don't override the "indexing" status while indexAll is running
+    if (this._running) {
+      console.log(`[Anamnesis][DEBUG] setQueued(${count}) ignored — indexAll in progress`);
+      return;
+    }
     if (count <= 0) {
-      if (!this._running) this.onStatus({ state: "idle" });
+      this.onStatus({ state: "idle" });
     } else {
       this.onStatus({ state: "queued", count, flushAt, delayMs });
     }
   }
 
-  /** Index a specific batch of file paths (called after the watcher flush timer fires). */
+  /**
+   * Index a specific batch of file paths (called after the watcher flush timer fires).
+   * If indexAll is running, files are injected into its live queue instead of being dropped.
+   */
   async indexFiles(paths: string[]): Promise<void> {
     if (this._running) {
-      // indexAll is already running — it will cover these files
-      console.log("[Anamnesis] indexFiles skipped — indexAll in progress");
+      // indexAll is in progress — push new paths into the live queue with dedup
+      let injected = 0;
+      for (const path of paths) {
+        if (this._indexQueuePaths.has(path)) {
+          console.log(`[Anamnesis][DEBUG] indexFiles: "${path}" already in live queue, skipping dedup`);
+          continue;
+        }
+        const f = this.app.vault.getAbstractFileByPath(path);
+        if (f instanceof TFile) {
+          this._indexQueue.push(f);
+          this._indexQueuePaths.add(path);
+          injected++;
+        }
+      }
+      console.log(`[Anamnesis][DEBUG] indexFiles: injected ${injected} path(s) into live indexAll queue (queue now: ${this._indexQueue.length})`);
       return;
     }
 
@@ -283,9 +368,28 @@ export class IndexingEngine {
       return idx === 0 ? base + backlinkSuffix : base;
     });
 
-    // ── Embed in batches ────────────────────────────────────────────────────
+    // ── Embed in batches — check pause/cancel between each batch ───────────
     const vectors: number[][] = [];
     for (let i = 0; i < embedTexts.length; i += EMBED_BATCH_SIZE) {
+      // Cancellation check — return empty so the caller skips this file
+      if (this._cancelled) {
+        console.log(`[Anamnesis][DEBUG] fileToRecords: cancelled mid-batch for "${file.basename}" (batch ${Math.floor(i / EMBED_BATCH_SIZE)})`);
+        return [];
+      }
+
+      // Pause check between batches for responsive pause UX
+      if (this._paused) {
+        console.log(`[Anamnesis][DEBUG] fileToRecords: pause detected mid-batch for "${file.basename}" (batch ${Math.floor(i / EMBED_BATCH_SIZE)}) — waiting for resume`);
+        this.onStatus({
+          state: "paused",
+          current: this._indexingCurrent,
+          total: this._indexingTotal,
+        });
+        await new Promise<void>(resolve => { this._pauseResolve = resolve; });
+        console.log(`[Anamnesis][DEBUG] fileToRecords: resumed for "${file.basename}"`);
+        if (this._cancelled) return [];
+      }
+
       const batchVectors = await this.provider.embed(embedTexts.slice(i, i + EMBED_BATCH_SIZE));
       vectors.push(...batchVectors);
     }

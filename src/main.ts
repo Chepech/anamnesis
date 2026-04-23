@@ -115,6 +115,7 @@ export default class AnamnesisPlugin extends Plugin {
       new Notice("[Anamnesis] Not initialized — check settings.");
       return;
     }
+    console.log("[Anamnesis][DEBUG] triggerFullIndex: starting manual reindex");
     await this.indexer.indexAll();
     // Watcher may have been skipped at init due to a schema/dim mismatch.
     // Now that the index is rebuilt, start it if enabled and not already running.
@@ -173,12 +174,42 @@ export default class AnamnesisPlugin extends Plugin {
       (status) => this.setStatus(status)
     );
 
-    // Skip the watcher when there's a schema/dim mismatch — incremental adds
-    // would fail against the old table. The user must re-index first.
-    if (this.settings.autoIndexOnChange && !dimMismatch && !schemaMismatch) {
-      this.watcher = new VaultWatcher(this.app, this.indexer, this.settings);
-      this.watcher.start();
-    }
+    // Determine whether we need a full reindex on this startup:
+    //   - First-ever load: initialIndexDone is false
+    //   - Schema or dimension mismatch: existing table is incompatible
+    const needsReindex = !this.settings.initialIndexDone || dimMismatch || schemaMismatch;
+
+    console.log(
+      `[Anamnesis][DEBUG] initCore: initialIndexDone=${this.settings.initialIndexDone}` +
+      ` dimMismatch=${dimMismatch} schemaMismatch=${schemaMismatch}` +
+      ` → needsReindex=${needsReindex}`
+    );
+
+    // Defer watcher start (and any auto-reindex) until after the workspace layout
+    // is fully ready. This prevents Obsidian's initial vault scan from flooding
+    // the watcher with create events for every existing file on every startup.
+    this.app.workspace.onLayoutReady(async () => {
+      console.log("[Anamnesis][DEBUG] onLayoutReady fired");
+
+      if (needsReindex && this.indexer) {
+        console.log("[Anamnesis][DEBUG] Auto-reindex triggered (needsReindex=true)");
+        const success = await this.indexer.indexAll();
+        console.log(`[Anamnesis][DEBUG] Auto-reindex finished — success=${success}`);
+
+        if (success) {
+          // Only mark done after a successful completion so that an interrupted
+          // first-run reindex retries automatically on the next startup.
+          this.settings.initialIndexDone = true;
+          await this.saveData(this.settings);
+          console.log("[Anamnesis][DEBUG] initialIndexDone set to true and saved");
+        }
+      }
+
+      // Always try to start the watcher after the reindex attempt (success or not).
+      // syncWatcher respects the autoIndexOnChange setting.
+      this.syncWatcher();
+      console.log("[Anamnesis][DEBUG] syncWatcher called from onLayoutReady");
+    });
 
     this.addCommand({
       id: "open-panel",

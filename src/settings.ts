@@ -27,6 +27,8 @@ export interface PluginSettings {
    * 0 = pure semantic similarity. Higher values surface well-linked notes more.
    */
   importanceWeight: number;
+  /** True after the first successful indexAll completes. Prevents auto-reindex on every startup. */
+  initialIndexDone: boolean;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   mcpEnabled: false,
   mcpPort: 8868,
   importanceWeight: 0.05,
+  initialIndexDone: false,
 };
 
 export class AnamnesisSettingTab extends PluginSettingTab {
