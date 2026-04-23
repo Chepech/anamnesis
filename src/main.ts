@@ -173,12 +173,29 @@ export default class AnamnesisPlugin extends Plugin {
       (status) => this.setStatus(status)
     );
 
-    // Skip the watcher when there's a schema/dim mismatch — incremental adds
-    // would fail against the old table. The user must re-index first.
-    if (this.settings.autoIndexOnChange && !dimMismatch && !schemaMismatch) {
-      this.watcher = new VaultWatcher(this.app, this.indexer, this.settings);
-      this.watcher.start();
-    }
+    // Determine whether we need a full reindex on this startup:
+    //   - First-ever load: initialIndexDone is false
+    //   - Schema or dimension mismatch: existing table is incompatible
+    const needsReindex = !this.settings.initialIndexDone || dimMismatch || schemaMismatch;
+
+    // Defer watcher start (and any auto-reindex) until after the workspace layout
+    // is fully ready. This prevents Obsidian's initial vault scan from flooding
+    // the watcher with create events for every existing file on every startup.
+    this.app.workspace.onLayoutReady(async () => {
+      if (needsReindex && this.indexer) {
+        const success = await this.indexer.indexAll();
+        if (success) {
+          // Only mark done after a successful completion so that an interrupted
+          // first-run reindex retries automatically on the next startup.
+          this.settings.initialIndexDone = true;
+          await this.saveData(this.settings);
+        }
+      }
+
+      // Always try to start the watcher after the reindex attempt (success or not).
+      // syncWatcher respects the autoIndexOnChange setting.
+      this.syncWatcher();
+    });
 
     this.addCommand({
       id: "open-panel",

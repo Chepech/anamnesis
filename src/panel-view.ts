@@ -132,7 +132,9 @@ export class AnamnesisPanel extends ItemView {
     this.pauseBtn.setAttribute("aria-label", "Pause");
     this.pauseBtn.style.display = "none";
     this.pauseBtn.addEventListener("click", () => {
-      if (this.indexer.isPaused) this.indexer.resume();
+      // Use observable status state (not the internal isPaused flag) to avoid
+      // the race where a double-click calls resume() before the status updates.
+      if (this.currentStatus.state === "paused") this.indexer.resume();
       else this.indexer.pause();
     });
 
