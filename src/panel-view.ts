@@ -134,13 +134,8 @@ export class AnamnesisPanel extends ItemView {
     this.pauseBtn.addEventListener("click", () => {
       // Use observable status state (not the internal isPaused flag) to avoid
       // the race where a double-click calls resume() before the status updates.
-      if (this.currentStatus.state === "paused") {
-        console.log("[Anamnesis][DEBUG] Pause button: state=paused → calling resume()");
-        this.indexer.resume();
-      } else {
-        console.log("[Anamnesis][DEBUG] Pause button: state=" + this.currentStatus.state + " → calling pause()");
-        this.indexer.pause();
-      }
+      if (this.currentStatus.state === "paused") this.indexer.resume();
+      else this.indexer.pause();
     });
 
     // Re-index

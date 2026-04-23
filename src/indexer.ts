@@ -86,19 +86,16 @@ export class IndexingEngine {
   pause(): void {
     if (!this._running || this._paused) return;
     this._paused = true;
-    console.log("[Anamnesis][DEBUG] pause() called — _paused set to true");
   }
 
   resume(): void {
     if (!this._paused) return;
     this._paused = false;
-    console.log("[Anamnesis][DEBUG] resume() called — resolving pause promise");
     this._pauseResolve?.();
     this._pauseResolve = null;
   }
 
   cancel(): void {
-    console.log("[Anamnesis][DEBUG] cancel() called");
     this._cancelled = true;
     this.resume(); // unblock if waiting on pause
   }
@@ -144,16 +141,11 @@ export class IndexingEngine {
 
         // ── Pause checkpoint ────────────────────────────────────────────────
         if (this._paused) {
-          console.log(`[Anamnesis][DEBUG] Pause checkpoint hit before file: ${file.basename} (${processed}/${currentTotal})`);
           this.onStatus({ state: "paused", current: processed, total: currentTotal });
           await new Promise<void>(resolve => { this._pauseResolve = resolve; });
-          console.log("[Anamnesis][DEBUG] Resumed from pause checkpoint");
         }
 
-        if (this._cancelled) {
-          console.log("[Anamnesis][DEBUG] Cancelled at file loop checkpoint");
-          break;
-        }
+        if (this._cancelled) break;
 
         // ── File existence check ─────────────────────────────────────────────
         // File may have been deleted or moved while this loop was running
@@ -180,17 +172,16 @@ export class IndexingEngine {
         this._indexingCurrent = processed;
 
         if (processed % 25 === 0) {
-          console.log(`[Anamnesis] Indexed ${processed} / ${processed + this._indexQueue.length} (queue remaining: ${this._indexQueue.length})`);
+          console.log(`[Anamnesis] Indexed ${processed} / ${processed + this._indexQueue.length}`);
         }
       }
 
       if (!this._cancelled) {
         this._lastIndexedCount = processed;
-        console.log(`[Anamnesis] Full index complete: ${processed} files processed`);
+        console.log(`[Anamnesis] Full index complete: ${processed} files`);
         this.onStatus({ state: "idle" });
         success = true;
       } else {
-        console.log(`[Anamnesis][DEBUG] indexAll cancelled after ${processed} files`);
         this.onStatus({ state: "idle" });
       }
     } catch (err) {
@@ -204,7 +195,6 @@ export class IndexingEngine {
       this._running = false;
       this._paused = false;
       this._cancelled = false;
-      console.log(`[Anamnesis][DEBUG] indexAll finished — success=${success}`);
     }
 
     return success;
@@ -213,10 +203,7 @@ export class IndexingEngine {
   /** Called by VaultWatcher to reflect pending queue size in the UI. */
   setQueued(count: number, flushAt = 0, delayMs = 0): void {
     // Don't override the "indexing" status while indexAll is running
-    if (this._running) {
-      console.log(`[Anamnesis][DEBUG] setQueued(${count}) ignored — indexAll in progress`);
-      return;
-    }
+    if (this._running) return;
     if (count <= 0) {
       this.onStatus({ state: "idle" });
     } else {
@@ -231,20 +218,14 @@ export class IndexingEngine {
   async indexFiles(paths: string[]): Promise<void> {
     if (this._running) {
       // indexAll is in progress — push new paths into the live queue with dedup
-      let injected = 0;
       for (const path of paths) {
-        if (this._indexQueuePaths.has(path)) {
-          console.log(`[Anamnesis][DEBUG] indexFiles: "${path}" already in live queue, skipping dedup`);
-          continue;
-        }
+        if (this._indexQueuePaths.has(path)) continue;
         const f = this.app.vault.getAbstractFileByPath(path);
         if (f instanceof TFile) {
           this._indexQueue.push(f);
           this._indexQueuePaths.add(path);
-          injected++;
         }
       }
-      console.log(`[Anamnesis][DEBUG] indexFiles: injected ${injected} path(s) into live indexAll queue (queue now: ${this._indexQueue.length})`);
       return;
     }
 
@@ -372,21 +353,16 @@ export class IndexingEngine {
     const vectors: number[][] = [];
     for (let i = 0; i < embedTexts.length; i += EMBED_BATCH_SIZE) {
       // Cancellation check — return empty so the caller skips this file
-      if (this._cancelled) {
-        console.log(`[Anamnesis][DEBUG] fileToRecords: cancelled mid-batch for "${file.basename}" (batch ${Math.floor(i / EMBED_BATCH_SIZE)})`);
-        return [];
-      }
+      if (this._cancelled) return [];
 
       // Pause check between batches for responsive pause UX
       if (this._paused) {
-        console.log(`[Anamnesis][DEBUG] fileToRecords: pause detected mid-batch for "${file.basename}" (batch ${Math.floor(i / EMBED_BATCH_SIZE)}) — waiting for resume`);
         this.onStatus({
           state: "paused",
           current: this._indexingCurrent,
           total: this._indexingTotal,
         });
         await new Promise<void>(resolve => { this._pauseResolve = resolve; });
-        console.log(`[Anamnesis][DEBUG] fileToRecords: resumed for "${file.basename}"`);
         if (this._cancelled) return [];
       }
 
