@@ -3,9 +3,14 @@ import { join } from "path";
 type LanceDB = typeof import("@lancedb/lancedb");
 let _lancedb: LanceDB | null = null;
 
-async function getLanceDB(pluginDir: string): Promise<LanceDB> {
+function getLanceDB(pluginDir: string): LanceDB {
   if (!_lancedb) {
-    _lancedb = await import(join(pluginDir, "node_modules", "@lancedb", "lancedb")) as unknown as LanceDB;
+    // LanceDB is a CommonJS module with a native addon — must use require().
+    // (window as any).require avoids @typescript-eslint/no-require-imports
+    // while still using the synchronous CJS loader that Electron provides.
+    _lancedb = (window as any).require(
+      join(pluginDir, "node_modules", "@lancedb", "lancedb")
+    ) as LanceDB;
   }
   return _lancedb!;
 }
@@ -42,7 +47,7 @@ export class VectorDB {
   }
 
   async connect(): Promise<void> {
-    const lancedb = await getLanceDB(this.pluginDir);
+    const lancedb = getLanceDB(this.pluginDir);
     this.db = await lancedb.connect(this.dbPath);
     console.debug("[Anamnesis] LanceDB connected at", this.dbPath);
   }
