@@ -3,9 +3,9 @@ import { join } from "path";
 type LanceDB = typeof import("@lancedb/lancedb");
 let _lancedb: LanceDB | null = null;
 
-function getLanceDB(pluginDir: string): LanceDB {
+async function getLanceDB(pluginDir: string): Promise<LanceDB> {
   if (!_lancedb) {
-    _lancedb = require(join(pluginDir, "node_modules", "@lancedb", "lancedb"));
+    _lancedb = await import(join(pluginDir, "node_modules", "@lancedb", "lancedb")) as unknown as LanceDB;
   }
   return _lancedb!;
 }
@@ -42,9 +42,9 @@ export class VectorDB {
   }
 
   async connect(): Promise<void> {
-    const lancedb = getLanceDB(this.pluginDir);
+    const lancedb = await getLanceDB(this.pluginDir);
     this.db = await lancedb.connect(this.dbPath);
-    console.log("[Anamnesis] LanceDB connected at", this.dbPath);
+    console.debug("[Anamnesis] LanceDB connected at", this.dbPath);
   }
 
   async ensureTable(): Promise<import("@lancedb/lancedb").Table> {
@@ -73,7 +73,7 @@ export class VectorDB {
 
     const table = await this.db.createTable(CHUNKS_TABLE, seed);
     await table.delete('id = "__seed__"');
-    console.log(`[Anamnesis] Created chunks table (dim=${this.vectorDim}, schema=v${SCHEMA_VERSION})`);
+    console.debug(`[Anamnesis] Created chunks table (dim=${this.vectorDim}, schema=v${SCHEMA_VERSION})`);
     return table;
   }
 
@@ -87,7 +87,7 @@ export class VectorDB {
     const tableNames = await this.db.tableNames();
     if (tableNames.includes(CHUNKS_TABLE)) {
       await this.db.dropTable(CHUNKS_TABLE);
-      console.log("[Anamnesis] Dropped chunks table");
+      console.debug("[Anamnesis] Dropped chunks table");
     }
   }
 
@@ -168,7 +168,7 @@ export class VectorDB {
       .sort((a, b) => a._boosted_score - b._boosted_score) as unknown as ChunkRecord[];
   }
 
-  async close(): Promise<void> {
+  close(): void {
     this.db = null;
   }
 }

@@ -76,19 +76,19 @@ export class AnamnesisPanel extends ItemView {
     await this.refreshStats();
   }
 
-  async onClose(): Promise<void> {
+  onClose(): Promise<void> {
     this.stopCountdown();
+    return Promise.resolve();
   }
 
   updateStatus(status: IndexStatus): void {
     this.currentStatus = status;
     this.renderStatus();
-    if (status.state === "idle") this.refreshStats();
+    if (status.state === "idle") void this.refreshStats();
   }
 
   updateMcpStatus(status: "stopped" | "running" | "error", port: number): void {
     this.mcpDotEl.className = "anamnesis-status-dot";
-    this.mcpDotEl.style.background = ""; // clear any previous inline override
 
     // Always reflect the current port and URL
     const displayPort = port > 0 ? port : this.settings.mcpPort;
@@ -130,7 +130,7 @@ export class AnamnesisPanel extends ItemView {
     // Pause / Resume — hidden until indexing
     this.pauseBtn = actionBar.createEl("button", { cls: "anamnesis-action-btn" });
     this.pauseBtn.setAttribute("aria-label", "Pause");
-    this.pauseBtn.style.display = "none";
+    this.pauseBtn.hide();
     this.pauseBtn.addEventListener("click", () => {
       // Use observable status state (not the internal isPaused flag) to avoid
       // the race where a double-click calls resume() before the status updates.
@@ -142,21 +142,20 @@ export class AnamnesisPanel extends ItemView {
     this.reindexBtn = actionBar.createEl("button", { cls: "anamnesis-action-btn anamnesis-action-btn--primary" });
     this.reindexBtn.setAttribute("aria-label", "Re-index vault");
     this.buildActionBtn(this.reindexBtn, "database", "Re-index");
-    this.reindexBtn.addEventListener("click", async () => {
+    this.reindexBtn.addEventListener("click", () => {
       this.reindexBtn.disabled = true;
-      await this.onReindex();
-      this.reindexBtn.disabled = false;
+      void this.onReindex().finally(() => { this.reindexBtn.disabled = false; });
     });
 
     // Semantic Search
     const searchBtn = actionBar.createEl("button", { cls: "anamnesis-action-btn" });
-    searchBtn.setAttribute("aria-label", "Semantic Search");
+    searchBtn.setAttribute("aria-label", "Semantic search");
     this.buildActionBtn(searchBtn, "telescope", "Search");
     searchBtn.addEventListener("click", () => this.onOpenSearch());
 
     // Vector Graph
     const graphBtn = actionBar.createEl("button", { cls: "anamnesis-action-btn" });
-    graphBtn.setAttribute("aria-label", "Vector Graph");
+    graphBtn.setAttribute("aria-label", "Vector graph");
     this.buildActionBtn(graphBtn, "git-fork", "Graph");
     graphBtn.addEventListener("click", () => this.onOpenGraph());
 
@@ -174,12 +173,12 @@ export class AnamnesisPanel extends ItemView {
 
     // Countdown bar — drains from full to empty while files are queued
     this.countdownEl = statusCard.createDiv("anamnesis-countdown-bar-wrap");
-    this.countdownEl.style.display = "none";
+    this.countdownEl.hide();
     this.countdownFillEl = this.countdownEl.createDiv("anamnesis-countdown-fill");
 
     // Indexing progress bar — fills from empty to full during active indexing
     this.progressEl = statusCard.createDiv("anamnesis-progress-bar-wrap");
-    this.progressEl.style.display = "none";
+    this.progressEl.hide();
     this.progressEl.createDiv("anamnesis-progress-fill");
 
     // ── Stats card ───────────────────────────────────────────────────────────
@@ -209,7 +208,7 @@ export class AnamnesisPanel extends ItemView {
 
     // ── MCP card ─────────────────────────────────────────────────────────────
     const mcpCard = root.createDiv("anamnesis-card");
-    mcpCard.createEl("p", { cls: "anamnesis-card-label", text: "MCP Server" });
+    mcpCard.createEl("p", { cls: "anamnesis-card-label", text: "MCP server" });
 
     const mcpRow = mcpCard.createDiv("anamnesis-status-row");
     this.mcpDotEl = mcpRow.createDiv("anamnesis-status-dot anamnesis-dot-idle");
@@ -266,7 +265,7 @@ export class AnamnesisPanel extends ItemView {
     } else if (s.state === "queued") {
       this.statusDotEl.addClass("anamnesis-dot-queued");
       this.statusTextEl.setText(`${s.count} file${s.count === 1 ? "" : "s"} queued`);
-      this.countdownEl.style.display = "block";
+      this.countdownEl.show();
       this.startCountdown(s.flushAt, s.delayMs);
     } else if (s.state === "indexing") {
       this.statusDotEl.addClass("anamnesis-dot-indexing");
@@ -283,25 +282,25 @@ export class AnamnesisPanel extends ItemView {
 
     if (s.state === "indexing" || s.state === "paused") {
       const pct = s.total > 0 ? (s.current / s.total) * 100 : 0;
-      this.progressEl.style.display = "block";
+      this.progressEl.show();
       const fill = this.progressEl.querySelector(".anamnesis-progress-fill") as HTMLElement;
       if (fill) fill.style.width = `${pct}%`;
 
-      this.pauseBtn.style.display = "flex";
+      this.pauseBtn.show();
       this.buildActionBtn(
         this.pauseBtn,
         s.state === "paused" ? "play" : "pause",
         s.state === "paused" ? "Resume" : "Pause"
       );
     } else {
-      this.progressEl.style.display = "none";
-      this.pauseBtn.style.display = "none";
+      this.progressEl.hide();
+      this.pauseBtn.hide();
     }
 
     // Hide countdown bar and stop animation for any non-queued state
     if (s.state !== "queued") {
       this.stopCountdown();
-      this.countdownEl.style.display = "none";
+      this.countdownEl.hide();
     }
   }
 

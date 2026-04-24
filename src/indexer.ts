@@ -125,7 +125,7 @@ export class IndexingEngine {
       this._indexQueue = this.getIndexableFiles();
       this._indexQueuePaths = new Set(this._indexQueue.map(f => f.path));
       const initialTotal = this._indexQueue.length;
-      console.log(`[Anamnesis] Starting full index: ${initialTotal} files`);
+      console.debug(`[Anamnesis] Starting full index: ${initialTotal} files`);
       this.onStatus({ state: "indexing", current: 0, total: initialTotal });
 
       let processed = 0;
@@ -172,13 +172,13 @@ export class IndexingEngine {
         this._indexingCurrent = processed;
 
         if (processed % 25 === 0) {
-          console.log(`[Anamnesis] Indexed ${processed} / ${processed + this._indexQueue.length}`);
+          console.debug(`[Anamnesis] Indexed ${processed} / ${processed + this._indexQueue.length}`);
         }
       }
 
       if (!this._cancelled) {
         this._lastIndexedCount = processed;
-        console.log(`[Anamnesis] Full index complete: ${processed} files`);
+        console.debug(`[Anamnesis] Full index complete: ${processed} files`);
         this.onStatus({ state: "idle" });
         success = true;
       } else {
@@ -261,7 +261,7 @@ export class IndexingEngine {
         processed++;
       }
 
-      console.log(`[Anamnesis] Batch indexed ${processed} file(s)`);
+      console.debug(`[Anamnesis] Batch indexed ${processed} file(s)`);
       this.onStatus({ state: "idle" });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -284,7 +284,7 @@ export class IndexingEngine {
       const records = await this.fileToRecords(file);
       if (records.length > 0) await table.add(records);
       this.mtimeCache.set(file.path, file.stat.mtime);
-      console.log(`[Anamnesis] Re-indexed: ${file.path} (${records.length} chunks)`);
+      console.debug(`[Anamnesis] Re-indexed: ${file.path} (${records.length} chunks)`);
     } catch (err) {
       console.error(`[Anamnesis] indexFile failed for ${file.path}:`, err);
     }
@@ -295,7 +295,7 @@ export class IndexingEngine {
     try {
       const table = await this.db.openTable();
       await table.delete(`file_path = "${escape(filePath)}"`);
-      console.log(`[Anamnesis] Deleted chunks for: ${filePath}`);
+      console.debug(`[Anamnesis] Deleted chunks for: ${filePath}`);
     } catch (err) {
       console.error(`[Anamnesis] deleteFile failed for ${filePath}:`, err);
     }
@@ -308,6 +308,8 @@ export class IndexingEngine {
   }
 
   private isExcluded(path: string): boolean {
+    const configDir = this.app.vault.configDir;
+    if (path.startsWith(configDir)) return true;
     const patterns = this.settings.excludePatterns
       .split("\n").map((p) => p.trim()).filter(Boolean);
     return patterns.some((p) => path.startsWith(p) || path.includes(`/${p}/`));

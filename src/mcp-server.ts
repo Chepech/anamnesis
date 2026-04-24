@@ -15,7 +15,7 @@ import { App, TFile } from "obsidian";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import type { VectorDB } from "./db";
+import type { VectorDB, ChunkRecord } from "./db";
 import type { EmbeddingProvider } from "./embedding/bridge";
 
 export type McpStatus = "stopped" | "running" | "error";
@@ -46,42 +46,8 @@ export class AnamnesisServerMCP {
     this._port = port;
     this._error = "";
 
-    this.httpServer = http.createServer(async (req, res) => {
-      // CORS — Claude Desktop is a native app but some clients are browser-based
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type, mcp-session-id");
-
-      if (req.method === "OPTIONS") {
-        res.writeHead(204);
-        res.end();
-        return;
-      }
-
-      if (req.url !== "/mcp") {
-        res.writeHead(404, { "Content-Type": "text/plain" });
-        res.end("Not found");
-        return;
-      }
-
-      // Stateless streamable HTTP requires a fresh protocol + transport pair per request.
-      const mcpServer = this.createMcpServer();
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined, // stateless
-      });
-
-      res.on("close", () => transport.close());
-
-      try {
-        await mcpServer.connect(transport);
-        const body = await readBody(req);
-        await transport.handleRequest(req, res, body);
-      } catch (err) {
-        if (!res.headersSent) {
-          res.writeHead(500, { "Content-Type": "text/plain" });
-          res.end(String(err));
-        }
-      }
+    this.httpServer = http.createServer((req, res) => {
+      void this.handleRequest(req, res);
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -94,7 +60,7 @@ export class AnamnesisServerMCP {
       });
       this.httpServer!.listen(port, "127.0.0.1", () => {
         this._status = "running";
-        console.log(`[Anamnesis] MCP server listening on http://127.0.0.1:${port}/mcp`);
+        console.debug(`[Anamnesis] MCP server listening on http://127.0.0.1:${port}/mcp`);
         resolve();
       });
     });
@@ -110,7 +76,45 @@ export class AnamnesisServerMCP {
     });
     this.httpServer = null;
     this._status = "stopped";
-    console.log("[Anamnesis] MCP server stopped");
+    console.debug("[Anamnesis] MCP server stopped");
+  }
+
+  private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    // CORS — Claude Desktop is a native app but some clients are browser-based
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, mcp-session-id");
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    if (req.url !== "/mcp") {
+      res.writeHead(404, { "Content-Type": "text/plain" });
+      res.end("Not found");
+      return;
+    }
+
+    // Stateless streamable HTTP requires a fresh protocol + transport pair per request.
+    const mcpServer = this.createMcpServer();
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined, // stateless
+    });
+
+    res.on("close", () => void transport.close());
+
+    try {
+      await mcpServer.connect(transport);
+      const body = await readBody(req);
+      await transport.handleRequest(req, res, body);
+    } catch (err) {
+      if (!res.headersSent) {
+        res.writeHead(500, { "Content-Type": "text/plain" });
+        res.end(String(err));
+      }
+    }
   }
 
   // ── Tools ──────────────────────────────────────────────────────────────────
@@ -119,36 +123,39 @@ export class AnamnesisServerMCP {
     const mcpServer = new McpServer({ name: "Anamnesis", version: "1.0.0" });
 
     // ── search_vault ─────────────────────────────────────────────────────────
-    mcpServer.tool(
+    mcpServer.registerTool(
       "search_vault",
-      "Semantic search over the Obsidian vault. Returns the most relevant chunks " +
-        "ranked by cosine similarity to the query.",
       {
-        query: z.string().min(1).describe("Natural language search query"),
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(50)
-          .default(10)
-          .describe("Maximum number of chunks to return (default 10, max 50)"),
+        description:
+          "Semantic search over the Obsidian vault. Returns the most relevant chunks " +
+          "ranked by cosine similarity to the query.",
+        inputSchema: {
+          query: z.string().min(1).describe("Natural language search query"),
+          limit: z
+            .number()
+            .int()
+            .min(1)
+            .max(50)
+            .default(10)
+            .describe("Maximum number of chunks to return (default 10, max 50)"),
+        },
       },
       async ({ query, limit }) => {
         const [queryVec] = await this.provider.embed([query]);
         const rows = await this.db.search(queryVec, limit);
 
-        const results = rows.map((r: any) => ({
-          file_path: r.file_path as string,
-          context_path: r.context_path as string,
-          heading: r.heading as string,
-          chunk_index: r.chunk_index as number,
-          text: r.text as string,
-          tags: r.tags as string,
-          importance_score: r.importance_score as number,
+        const results = (rows as (ChunkRecord & { _distance?: number })[]).map((r) => ({
+          file_path: r.file_path,
+          context_path: r.context_path,
+          heading: r.heading,
+          chunk_index: r.chunk_index,
+          text: r.text,
+          tags: r.tags,
+          importance_score: r.importance_score,
           // LanceDB adds _distance for vector search; cosine distance ∈ [0,2]
           // for unit vectors, so similarity = 1 - distance/2 gives a clean [0,1] score.
           score: r._distance !== undefined
-            ? Math.max(0, 1 - (r._distance as number) / 2)
+            ? Math.max(0, 1 - r._distance / 2)
             : null,
         }));
 
@@ -159,13 +166,15 @@ export class AnamnesisServerMCP {
     );
 
     // ── read_note ─────────────────────────────────────────────────────────────
-    mcpServer.tool(
+    mcpServer.registerTool(
       "read_note",
-      "Read the full current content of a vault note by its vault-relative path.",
       {
-        path: z
-          .string()
-          .describe('Vault-relative path, e.g. "Forge/Research/topic.md"'),
+        description: "Read the full current content of a vault note by its vault-relative path.",
+        inputSchema: {
+          path: z
+            .string()
+            .describe('Vault-relative path, e.g. "Forge/Research/topic.md"'),
+        },
       },
       async ({ path }) => {
         const file = this.app.vault.getAbstractFileByPath(path);
@@ -189,10 +198,11 @@ export class AnamnesisServerMCP {
     );
 
     // ── list_indexed_files ────────────────────────────────────────────────────
-    mcpServer.tool(
+    mcpServer.registerTool(
       "list_indexed_files",
-      "List all files currently in the Anamnesis vector index, with their chunk counts.",
-      {},
+      {
+        description: "List all files currently in the Anamnesis vector index, with their chunk counts.",
+      },
       async () => {
         const chunks = await this.db.getAllChunks();
 
@@ -217,7 +227,7 @@ export class AnamnesisServerMCP {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function readBody(req: http.IncomingMessage): Promise<any> {
+function readBody(req: http.IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk) => chunks.push(chunk));

@@ -30,8 +30,8 @@ export default class AnamnesisPlugin extends Plugin {
   }
 
   async onload(): Promise<void> {
-    console.log("[Anamnesis] Loading plugin");
-    console.log("[Anamnesis] Plugin dir:", this.getPluginDir());
+    console.debug("[Anamnesis] Loading plugin");
+    console.debug("[Anamnesis] Plugin dir:", this.getPluginDir());
 
     await this.loadSettings();
     this.addSettingTab(new AnamnesisSettingTab(this.app, this));
@@ -43,13 +43,12 @@ export default class AnamnesisPlugin extends Plugin {
       }
       return new AnamnesisPanel(leaf, this.vectorDB, this.indexer, this.settings, {
         onReindex: () => this.triggerFullIndex(),
-        onOpenSearch: () => this.activateView(SEARCH_VIEW_TYPE, "right"),
-        onOpenGraph: () => this.activateView(GRAPH_VIEW_TYPE, "tab"),
+        onOpenSearch: () => void this.activateView(SEARCH_VIEW_TYPE, "right"),
+        onOpenGraph: () => void this.activateView(GRAPH_VIEW_TYPE, "tab"),
         onFlushNow: () => this.watcher?.flushNow(),
-        onMcpStart: () => this.startMcpServer(),
-        onMcpStop: async () => {
-          await this.mcpServer?.stop();
-          this.setMcpStatus("stopped");
+        onMcpStart: () => void this.startMcpServer(),
+        onMcpStop: () => {
+          void this.mcpServer?.stop().then(() => this.setMcpStatus("stopped"));
         },
       });
     });
@@ -70,13 +69,12 @@ export default class AnamnesisPlugin extends Plugin {
 
     // Single ribbon icon → control panel
     this.addRibbonIcon("database", "Anamnesis", () => {
-      this.activateView(PANEL_VIEW_TYPE, "right");
+      void this.activateView(PANEL_VIEW_TYPE, "right");
     });
 
     // Interactive status bar — icon only, tooltip on hover
     this.statusBarEl = this.addStatusBarItem();
     this.statusBarEl.addClass("anamnesis-status-bar");
-    this.statusBarEl.style.cursor = "pointer";
     setIcon(this.statusBarEl, "database");
     this.statusBarEl.addEventListener("click", (e) => this.showStatusMenu(e));
     this.setStatus({ state: "idle" });
@@ -84,7 +82,6 @@ export default class AnamnesisPlugin extends Plugin {
     // MCP status dot — second icon in the status bar
     this.mcpStatusBarEl = this.addStatusBarItem();
     this.mcpStatusBarEl.addClass("anamnesis-mcp-status-bar");
-    this.mcpStatusBarEl.style.cursor = "pointer";
     setIcon(this.mcpStatusBarEl, "server");
     this.mcpStatusBarEl.addEventListener("click", (e) => this.showStatusMenu(e));
     this.setMcpStatus("stopped");
@@ -99,15 +96,12 @@ export default class AnamnesisPlugin extends Plugin {
     }
   }
 
-  async onunload(): Promise<void> {
-    console.log("[Anamnesis] Unloading plugin");
-    this.app.workspace.detachLeavesOfType(PANEL_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(SEARCH_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(GRAPH_VIEW_TYPE);
+  onunload(): void {
+    console.debug("[Anamnesis] Unloading plugin");
     this.watcher?.stop();
     this.provider?.terminate?.();
-    await this.mcpServer?.stop();
-    await this.vectorDB?.close();
+    void this.mcpServer?.stop();
+    this.vectorDB?.close();
   }
 
   async triggerFullIndex(): Promise<void> {
@@ -205,7 +199,7 @@ export default class AnamnesisPlugin extends Plugin {
 
     this.addCommand({
       id: "open-search",
-      name: "Open Semantic Search",
+      name: "Open semantic search",
       callback: () => this.activateView(SEARCH_VIEW_TYPE, "right"),
     });
 
@@ -227,13 +221,13 @@ export default class AnamnesisPlugin extends Plugin {
       await this.startMcpServer();
     }
 
-    console.log("[Anamnesis] Core initialized");
+    console.debug("[Anamnesis] Core initialized");
   }
 
   private async activateView(type: string, where: "right" | "tab"): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(type);
     if (existing.length > 0) {
-      this.app.workspace.revealLeaf(existing[0]);
+      void this.app.workspace.revealLeaf(existing[0]);
       this.syncPanelMcpState();
       return;
     }
@@ -242,7 +236,7 @@ export default class AnamnesisPlugin extends Plugin {
       : this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     await leaf.setViewState({ type, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    void this.app.workspace.revealLeaf(leaf);
     this.syncPanelMcpState();
   }
 
@@ -357,7 +351,7 @@ export default class AnamnesisPlugin extends Plugin {
         this.settings.localModelName,
         cacheDir,
         (msg) => {
-          console.log("[Anamnesis]", msg);
+          console.debug("[Anamnesis]", msg);
           this.setStatus({ state: "indexing", current: 0, total: 0, label: msg });
         }
       );
@@ -387,35 +381,39 @@ export default class AnamnesisPlugin extends Plugin {
 
     if (!this.statusBarEl) return;
     let tooltip: string;
-    let color: string;
+
+    this.statusBarEl.removeClasses([
+      "anamnesis-status-bar--queued",
+      "anamnesis-status-bar--indexing",
+      "anamnesis-status-bar--paused",
+      "anamnesis-status-bar--error",
+    ]);
 
     switch (status.state) {
       case "idle":
         tooltip = "Anamnesis: Ready";
-        color = "";
         break;
       case "queued":
         tooltip = `Anamnesis: ${status.count} file${status.count === 1 ? "" : "s"} queued`;
-        color = "var(--color-blue)";
+        this.statusBarEl.addClass("anamnesis-status-bar--queued");
         break;
       case "indexing":
         tooltip = status.label && status.total === 0
           ? `Anamnesis: ${status.label}`
           : `Anamnesis: Indexing ${status.current}/${status.total}`;
-        color = "var(--color-yellow)";
+        this.statusBarEl.addClass("anamnesis-status-bar--indexing");
         break;
       case "paused":
         tooltip = `Anamnesis: Paused (${status.current}/${status.total})`;
-        color = "var(--color-orange)";
+        this.statusBarEl.addClass("anamnesis-status-bar--paused");
         break;
       case "error":
         tooltip = `Anamnesis: Error — ${status.message}`;
-        color = "var(--color-red)";
+        this.statusBarEl.addClass("anamnesis-status-bar--error");
         break;
     }
 
     this.statusBarEl.title = tooltip;
-    this.statusBarEl.style.color = color;
   }
 
   private setMcpStatus(status: "stopped" | "running" | "error"): void {
@@ -428,19 +426,23 @@ export default class AnamnesisPlugin extends Plugin {
       if (leaf.view instanceof AnamnesisPanel) leaf.view.updateMcpStatus(status, this.mcpServer?.port ?? 0);
     }
 
+    this.mcpStatusBarEl.removeClasses([
+      "anamnesis-mcp-status-bar--running",
+      "anamnesis-mcp-status-bar--error",
+    ]);
+
     const port = this.mcpServer?.port ?? 0;
     switch (status) {
       case "running":
         this.mcpStatusBarEl.title = `MCP: Listening on port ${port}`;
-        this.mcpStatusBarEl.style.color = "var(--color-green)";
+        this.mcpStatusBarEl.addClass("anamnesis-mcp-status-bar--running");
         break;
       case "error":
         this.mcpStatusBarEl.title = `MCP: Error — ${this.mcpServer?.error ?? "unknown"}`;
-        this.mcpStatusBarEl.style.color = "var(--color-red)";
+        this.mcpStatusBarEl.addClass("anamnesis-mcp-status-bar--error");
         break;
       default:
         this.mcpStatusBarEl.title = "MCP: Not running";
-        this.mcpStatusBarEl.style.color = "";
         break;
     }
   }

@@ -28892,7 +28892,7 @@ ctx.onmessage = async (e) => {
       });
       ctx.postMessage({ type: "ready" });
     } catch (err) {
-      ctx.postMessage({ type: "error", message: err?.message ?? String(err) });
+      ctx.postMessage({ type: "error", message: err instanceof Error ? err.message : String(err) });
     }
   } else if (msg.type === "embed") {
     try {
@@ -28900,7 +28900,7 @@ ctx.onmessage = async (e) => {
       const flat = Array.from(output.data);
       ctx.postMessage({ type: "result", id: msg.id, flat, dim: embDim });
     } catch (err) {
-      ctx.postMessage({ type: "error", id: msg.id, message: err?.message ?? String(err) });
+      ctx.postMessage({ type: "error", id: msg.id, message: err instanceof Error ? err.message : String(err) });
     }
   }
 };
