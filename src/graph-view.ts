@@ -53,49 +53,34 @@ export class GraphView extends ItemView {
   }
 
   getViewType(): string { return GRAPH_VIEW_TYPE; }
-  getDisplayText(): string { return "Anamnesis Graph"; }
+  getDisplayText(): string { return "Anamnesis graph"; }
   getIcon(): string { return "git-fork"; }
 
   async onOpen(): Promise<void> {
     const root = this.containerEl.children[1] as HTMLElement;
     root.empty();
-    root.style.cssText = "position:relative;display:flex;flex-direction:column;height:100%;padding:0;";
+    root.addClass("anamnesis-graph-root");
 
     // Top bar with status + rebuild button
-    const topBar = root.createDiv();
-    topBar.style.cssText =
-      "display:flex;align-items:center;gap:8px;padding:6px 10px;flex-shrink:0;border-bottom:1px solid var(--background-modifier-border);";
+    const topBar = root.createDiv("anamnesis-graph-top-bar");
 
-    this.statusEl = topBar.createEl("span");
-    this.statusEl.style.cssText = "flex:1;font-size:12px;color:var(--text-muted);";
+    this.statusEl = topBar.createEl("span", { cls: "anamnesis-graph-status" });
     this.statusEl.setText("Loading vectors…");
 
-    const rebuildBtn = topBar.createEl("button");
+    const rebuildBtn = topBar.createEl("button", { cls: "anamnesis-graph-rebuild-btn" });
     rebuildBtn.setText("Rebuild");
-    rebuildBtn.style.cssText = "font-size:11px;padding:2px 8px;";
-    rebuildBtn.addEventListener("click", async () => {
+    rebuildBtn.addEventListener("click", () => {
       rebuildBtn.disabled = true;
       this.nodes = [];
       this.edges = [];
       this.draw(); // clear canvas immediately
-      try {
-        await this.buildGraph();
-      } finally {
-        rebuildBtn.disabled = false;
-      }
+      void this.buildGraph().finally(() => { rebuildBtn.disabled = false; });
     });
 
-    this.canvasEl = root.createEl("canvas");
-    this.canvasEl.style.cssText = "flex:1;min-height:0;cursor:crosshair;display:block;";
+    this.canvasEl = root.createEl("canvas", { cls: "anamnesis-graph-canvas" });
     this.ctx = this.canvasEl.getContext("2d")!;
 
-    this.tooltipEl = root.createDiv();
-    this.tooltipEl.style.cssText = [
-      "position:absolute;pointer-events:none;display:none;",
-      "background:var(--background-primary);border:1px solid var(--background-modifier-border);",
-      "border-radius:6px;padding:6px 10px;font-size:12px;max-width:240px;",
-      "box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:100;line-height:1.4;",
-    ].join("");
+    this.tooltipEl = root.createDiv("anamnesis-graph-tooltip");
 
     this.bindEvents();
     this.resizeCanvas();
@@ -314,7 +299,7 @@ export class GraphView extends ItemView {
       this.dragging = true;
       this.dragStart = { x: e.clientX, y: e.clientY };
       this.panStart = { ...this.pan };
-      c.style.cursor = "grabbing";
+      c.setCssProps({ cursor: "grabbing" });
     });
 
     this.register(() => {
@@ -325,7 +310,7 @@ export class GraphView extends ItemView {
     window.addEventListener("mouseup", this._onMouseUp);
 
     c.addEventListener("click", () => {
-      if (this.hoveredNode) this.openFile(this.hoveredNode.filePath);
+      if (this.hoveredNode) void this.openFile(this.hoveredNode.filePath);
     });
   }
 
@@ -364,21 +349,21 @@ export class GraphView extends ItemView {
     }
 
     if (found) {
-      this.tooltipEl.style.display = "block";
+      this.tooltipEl.show();
       const parentRect = (this.containerEl.children[1] as HTMLElement).getBoundingClientRect();
       this.tooltipEl.style.left = `${e.clientX - parentRect.left + 14}px`;
       this.tooltipEl.style.top = `${e.clientY - parentRect.top + 14}px`;
-      this.tooltipEl.innerHTML =
-        `<strong style="display:block;margin-bottom:3px">${found.label}</strong>` +
-        `<span style="color:var(--text-muted);font-size:11px">${found.snippet}…</span>`;
+      this.tooltipEl.empty();
+      this.tooltipEl.createEl("strong", { text: found.label, cls: "anamnesis-tooltip-title" });
+      this.tooltipEl.createEl("span", { text: `${found.snippet}…`, cls: "anamnesis-tooltip-snippet" });
     } else {
-      this.tooltipEl.style.display = "none";
+      this.tooltipEl.hide();
     }
   };
 
   private _onMouseUp = () => {
     this.dragging = false;
-    this.canvasEl.style.cursor = "crosshair";
+    this.canvasEl.setCssProps({ cursor: "crosshair" });
   };
 
   private resizeCanvas(): void {

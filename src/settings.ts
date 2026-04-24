@@ -38,7 +38,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   openaiModelName: "text-embedding-3-small",
   chunkSize: 512,
   chunkOverlap: 64,
-  excludePatterns: ".obsidian\nnode_modules\nArchives",
+  excludePatterns: "node_modules\nArchives",
   autoIndexOnChange: true,
   indexedVectorDim: 0, // 0 means no index yet
   indexingStrategy: "conservative",
@@ -60,10 +60,10 @@ export class AnamnesisSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Anamnesis" });
+    new Setting(containerEl).setName("Anamnesis").setHeading();
 
     // ── Embedding provider ─────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Embeddings" });
+    new Setting(containerEl).setName("Embeddings").setHeading();
 
     new Setting(containerEl)
       .setName("Provider")
@@ -130,7 +130,7 @@ export class AnamnesisSettingTab extends PluginSettingTab {
     }
 
     // ── Indexing ────────────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Indexing" });
+    new Setting(containerEl).setName("Indexing").setHeading();
 
     new Setting(containerEl)
       .setName("Auto-index on change")
@@ -205,7 +205,7 @@ export class AnamnesisSettingTab extends PluginSettingTab {
       );
 
     // ── Search ──────────────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Search" });
+    new Setting(containerEl).setName("Search").setHeading();
 
     new Setting(containerEl)
       .setName("Graph importance boost")
@@ -226,7 +226,7 @@ export class AnamnesisSettingTab extends PluginSettingTab {
       );
 
     // ── MCP Server ──────────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "MCP Server" });
+    new Setting(containerEl).setName("MCP server").setHeading();
 
     new Setting(containerEl)
       .setName("Enable MCP server")
@@ -277,10 +277,10 @@ export class AnamnesisSettingTab extends PluginSettingTab {
             .onClick(async () => {
               await navigator.clipboard.writeText(snippet);
               btn.setIcon("check");
-              btn.buttonEl.style.color = "var(--color-green)";
+              btn.buttonEl.addClass("anamnesis-copy-success");
               setTimeout(() => {
                 btn.setIcon("copy");
-                btn.buttonEl.style.color = "";
+                btn.buttonEl.removeClass("anamnesis-copy-success");
               }, 2000);
             })
         );
@@ -289,7 +289,7 @@ export class AnamnesisSettingTab extends PluginSettingTab {
     }
 
     // ── Actions ─────────────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Actions" });
+    new Setting(containerEl).setName("Actions").setHeading();
 
     new Setting(containerEl)
       .setName("Re-index entire vault")

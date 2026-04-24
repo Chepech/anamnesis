@@ -444,12 +444,102 @@
   color: var(--text-normal);
 }
 
+/* ── Graph view ─────────────────────────────────────────────── */
+
+.anamnesis-graph-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.anamnesis-graph-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.anamnesis-graph-status {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.anamnesis-graph-rebuild-btn {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  font-size: 12px;
+  border-radius: 5px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.anamnesis-graph-rebuild-btn:hover:not(:disabled) {
+  background: var(--background-modifier-border);
+}
+
+.anamnesis-graph-rebuild-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.anamnesis-graph-canvas {
+  flex: 1;
+  display: block;
+  cursor: crosshair;
+  min-height: 0;
+}
+
+.anamnesis-graph-tooltip {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 7px;
+  padding: 7px 10px;
+  max-width: 240px;
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+  z-index: 20;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.anamnesis-tooltip-title {
+  font-weight: 600;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.anamnesis-tooltip-snippet {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* ── Status bar ─────────────────────────────────────────────── */
 
 .anamnesis-status-bar {
   display: flex;
   align-items: center;
   color: var(--text-muted);
+  cursor: pointer;
   transition: color 0.15s ease;
 }
 
@@ -463,17 +553,33 @@
   color: var(--text-normal);
 }
 
+.anamnesis-status-bar--queued  { color: var(--color-blue); }
+.anamnesis-status-bar--indexing { color: var(--color-yellow); }
+.anamnesis-status-bar--paused  { color: var(--color-orange); }
+.anamnesis-status-bar--error   { color: var(--color-red); }
+
 .anamnesis-mcp-status-bar {
   display: flex;
   align-items: center;
   color: var(--text-faint);
+  cursor: pointer;
   transition: color 0.15s ease;
 }
-
 
 .anamnesis-mcp-status-bar:hover {
   color: var(--text-normal);
 }
+
+.anamnesis-mcp-status-bar--running { color: var(--color-green); }
+.anamnesis-mcp-status-bar--error   { color: var(--color-red); }
+
+/* ── Copy success feedback ──────────────────────────────────── */
+
+.anamnesis-copy-success {
+  color: var(--color-green) !important;
+}
+
+/* ── OpenAI warning ─────────────────────────────────────────── */
 
 .anamnesis-openai-warning {
   background: var(--background-modifier-error);

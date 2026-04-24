@@ -59,7 +59,7 @@ export class VaultWatcher {
       () => this.app.vault.offref(onRename),
     ];
 
-    console.log("[Anamnesis] Vault watcher started");
+    console.debug("[Anamnesis] Vault watcher started");
   }
 
   /** Cancel the pending countdown and flush immediately. No-op if queue is empty. */
@@ -69,7 +69,7 @@ export class VaultWatcher {
       this.flushTimer = null;
     }
     if (this.pendingModify.size > 0 || this.pendingDelete.size > 0) {
-      this.flush();
+      void this.flush();
     }
   }
 
@@ -82,7 +82,7 @@ export class VaultWatcher {
     this.pendingDelete.clear();
     for (const off of this.unregister) off();
     this.unregister = [];
-    console.log("[Anamnesis] Vault watcher stopped");
+    console.debug("[Anamnesis] Vault watcher stopped");
   }
 
   // ── Queue management ───────────────────────────────────────────────────────
@@ -105,7 +105,7 @@ export class VaultWatcher {
     if (this.flushTimer) clearTimeout(this.flushTimer);
     const delayMs = this.settings.indexingStrategy === "aggressive" ? AGGRESSIVE_MS : CONSERVATIVE_MS;
     const flushAt = Date.now() + delayMs;
-    this.flushTimer = setTimeout(() => this.flush(), delayMs);
+    this.flushTimer = setTimeout(() => void this.flush(), delayMs);
     return { flushAt, delayMs };
   }
 

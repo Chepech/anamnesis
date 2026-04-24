@@ -35,21 +35,21 @@ export class SearchView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Semantic Search";
+    return "Semantic search";
   }
 
   getIcon(): string {
     return "telescope";
   }
 
-  async onOpen(): Promise<void> {
+  onOpen(): Promise<void> {
     const root = this.containerEl.children[1] as HTMLElement;
     root.empty();
     root.addClass("anamnesis-search-view");
 
     // ── Header ──────────────────────────────────────────────────────────────
     const header = root.createDiv("anamnesis-header");
-    header.createEl("h4", { text: "Anamnesis — Semantic Search" });
+    header.createEl("h4", { text: "Anamnesis — Semantic search" });
 
     // ── Search input ─────────────────────────────────────────────────────────
     const inputWrap = root.createDiv("anamnesis-input-wrap");
@@ -65,7 +65,7 @@ export class SearchView extends ItemView {
           clearTimeout(this.debounceTimer);
           this.debounceTimer = null;
         }
-        this.runSearch();
+        void this.runSearch();
       }
     });
 
@@ -74,10 +74,12 @@ export class SearchView extends ItemView {
 
     // ── Results container ────────────────────────────────────────────────────
     this.resultsEl = root.createDiv("anamnesis-results");
+    return Promise.resolve();
   }
 
-  async onClose(): Promise<void> {
+  onClose(): Promise<void> {
     if (this.debounceTimer !== null) clearTimeout(this.debounceTimer);
+    return Promise.resolve();
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
@@ -90,7 +92,7 @@ export class SearchView extends ItemView {
       this.resultsEl.empty();
       return;
     }
-    this.debounceTimer = window.setTimeout(() => this.runSearch(), 400);
+    this.debounceTimer = window.setTimeout(() => void this.runSearch(), 400);
   }
 
   private async runSearch(): Promise<void> {
@@ -139,7 +141,7 @@ export class SearchView extends ItemView {
       });
       link.addEventListener("click", (e) => {
         e.preventDefault();
-        this.openFile(filePath);
+        void this.openFile(filePath);
       });
 
       // Snippet(s)

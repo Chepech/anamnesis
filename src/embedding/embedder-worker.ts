@@ -43,18 +43,18 @@ ctx.onmessage = async (e: MessageEvent) => {
       });
 
       ctx.postMessage({ type: "ready" });
-    } catch (err: any) {
-      ctx.postMessage({ type: "error", message: err?.message ?? String(err) });
+    } catch (err: unknown) {
+      ctx.postMessage({ type: "error", message: err instanceof Error ? err.message : String(err) });
     }
 
   } else if (msg.type === "embed") {
     try {
       const output = await pipe(msg.texts, { pooling: "mean", normalize: true });
       // Transfer the underlying buffer to avoid a copy across the thread boundary
-      const flat = Array.from(output.data as Float32Array) as number[];
+      const flat = Array.from(output.data as Float32Array);
       ctx.postMessage({ type: "result", id: msg.id, flat, dim: embDim });
-    } catch (err: any) {
-      ctx.postMessage({ type: "error", id: msg.id, message: err?.message ?? String(err) });
+    } catch (err: unknown) {
+      ctx.postMessage({ type: "error", id: msg.id, message: err instanceof Error ? err.message : String(err) });
     }
   }
 };
