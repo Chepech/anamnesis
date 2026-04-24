@@ -253,7 +253,7 @@ export class AnamnesisPanel extends ItemView {
     this.statusDotEl.className = "anamnesis-status-dot";
 
     // Spinning icon on Re-index button while actively indexing
-    const iconEl = this.reindexBtn.querySelector(".anamnesis-action-icon") as HTMLElement | null;
+    const iconEl = this.reindexBtn.querySelector<HTMLElement>(".anamnesis-action-icon");
     iconEl?.classList.toggle("anamnesis-spinning", s.state === "indexing");
 
     // Flush button — active only when files are waiting in the queue

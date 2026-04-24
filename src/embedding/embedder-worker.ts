@@ -16,11 +16,11 @@
 import { join, sep } from "path";
 import * as Transformers from "@xenova/transformers";
 
-let pipe: any = null;
+let pipe: Awaited<ReturnType<typeof Transformers.pipeline>> | null = null;
 let embDim = 384;
 
 // In Electron workers self === globalThis
-const ctx: Worker = self as any;
+const ctx: Worker = self as unknown as Worker;
 
 ctx.onmessage = async (e: MessageEvent) => {
   const msg = e.data;
@@ -28,7 +28,8 @@ ctx.onmessage = async (e: MessageEvent) => {
   if (msg.type === "init") {
     try {
       const wasmPath = join(msg.pluginDir, "wasm") + sep;
-      const onnxEnv = (Transformers.env.backends as any)?.onnx;
+      type OnnxBackend = { wasm?: { wasmPaths: string; numThreads: number } };
+      const onnxEnv = (Transformers.env.backends as Record<string, OnnxBackend | undefined>)?.onnx;
       if (onnxEnv?.wasm) {
         onnxEnv.wasm.wasmPaths = wasmPath;
         onnxEnv.wasm.numThreads = 1;
@@ -49,9 +50,10 @@ ctx.onmessage = async (e: MessageEvent) => {
 
   } else if (msg.type === "embed") {
     try {
-      const output = await pipe(msg.texts, { pooling: "mean", normalize: true });
-      // Transfer the underlying buffer to avoid a copy across the thread boundary
-      const flat = Array.from(output.data as Float32Array);
+      if (!pipe) throw new Error("Model not initialized");
+      type EmbedFn = (texts: string[], opts: { pooling: string; normalize: boolean }) => Promise<{ data: Float32Array }>;
+      const output = await (pipe as unknown as EmbedFn)(msg.texts, { pooling: "mean", normalize: true });
+      const flat = Array.from(output.data);
       ctx.postMessage({ type: "result", id: msg.id, flat, dim: embDim });
     } catch (err: unknown) {
       ctx.postMessage({ type: "error", id: msg.id, message: err instanceof Error ? err.message : String(err) });

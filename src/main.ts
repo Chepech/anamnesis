@@ -364,7 +364,7 @@ export default class AnamnesisPlugin extends Plugin {
   }
 
   private getPluginDir(): string {
-    const adapter = this.app.vault.adapter as any;
+    const adapter = this.app.vault.adapter as { basePath?: string; getBasePath?: () => string };
     const basePath: string = adapter.basePath ?? adapter.getBasePath?.() ?? "";
     const manifestDir = this.manifest.dir ?? `.obsidian/plugins/${this.manifest.id}`;
     return join(basePath, manifestDir);

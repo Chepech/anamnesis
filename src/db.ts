@@ -3,16 +3,17 @@ import { join } from "path";
 type LanceDB = typeof import("@lancedb/lancedb");
 let _lancedb: LanceDB | null = null;
 
+// LanceDB is a CommonJS module with a native addon — must use require().
+// Electron exposes window.require as the synchronous CJS loader.
+type ElectronWindow = Window & { require: (id: string) => unknown };
+
 function getLanceDB(pluginDir: string): LanceDB {
-  if (!_lancedb) {
-    // LanceDB is a CommonJS module with a native addon — must use require().
-    // (window as any).require avoids @typescript-eslint/no-require-imports
-    // while still using the synchronous CJS loader that Electron provides.
-    _lancedb = (window as any).require(
-      join(pluginDir, "node_modules", "@lancedb", "lancedb")
-    ) as LanceDB;
-  }
-  return _lancedb!;
+  if (_lancedb) return _lancedb;
+  const db = (window as ElectronWindow).require(
+    join(pluginDir, "node_modules", "@lancedb", "lancedb")
+  ) as LanceDB;
+  _lancedb = db;
+  return db;
 }
 
 /** Bump this whenever the ChunkRecord schema changes to trigger a re-index prompt. */
@@ -106,7 +107,7 @@ export class VectorDB {
     const vectorField = schema.fields.find((f) => f.name === "vector");
     if (!vectorField) return null;
 
-    const listType = vectorField.type as any;
+    const listType = vectorField.type as { listSize?: number };
     return listType.listSize ?? null;
   }
 
@@ -129,7 +130,7 @@ export class VectorDB {
     // Read one row to get the stored version string
     const rows = await table.query().limit(1).toArray();
     if (rows.length === 0) return SCHEMA_VERSION; // empty table — treat as current
-    return String((rows[0] as any).schema_version ?? "1");
+    return String((rows[0] as Record<string, unknown>).schema_version ?? "1");
   }
 
   async countRows(): Promise<number> {
@@ -163,14 +164,15 @@ export class VectorDB {
     if (importanceWeight <= 0) return rows as unknown as ChunkRecord[];
 
     // Apply importance boost: lower _distance is better, so subtract the boost
-    return (rows as any[])
+    type SearchRow = ChunkRecord & { _distance?: number; _boosted_score?: number };
+    return (rows as unknown as SearchRow[])
       .map((r) => ({
         ...r,
         _boosted_score:
           (r._distance ?? 1) -
           importanceWeight * Math.log(1 + (r.importance_score ?? 0)),
       }))
-      .sort((a, b) => a._boosted_score - b._boosted_score) as unknown as ChunkRecord[];
+      .sort((a, b) => (a._boosted_score ?? 0) - (b._boosted_score ?? 0)) as unknown as ChunkRecord[];
   }
 
   close(): void {

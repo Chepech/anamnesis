@@ -60,14 +60,12 @@ export class AnamnesisSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    new Setting(containerEl).setName("Anamnesis").setHeading();
-
     // ── Embedding provider ─────────────────────────────────────────────────
     new Setting(containerEl).setName("Embeddings").setHeading();
 
     new Setting(containerEl)
       .setName("Provider")
-      .setDesc("Local runs offline (~23 MB model download on first use). OpenAI requires an API key.")
+      .setDesc("Local runs offline. OpenAI requires an API key.")
       .addDropdown((drop) =>
         drop
           .addOption("local", "Local (offline)")
@@ -83,11 +81,11 @@ export class AnamnesisSettingTab extends PluginSettingTab {
     if (this.plugin.settings.embeddingProvider === "local") {
       new Setting(containerEl)
         .setName("Local model")
-        .setDesc("HuggingFace model ID. Changing this requires a full re-index.")
+        .setDesc("Model identifier used for embedding. Changing this requires a full re-index.")
         .addDropdown((drop) =>
           drop
-            .addOption("Xenova/all-MiniLM-L6-v2", "all-MiniLM-L6-v2 (384-dim, fast)")
-            .addOption("Xenova/all-mpnet-base-v2", "all-mpnet-base-v2 (768-dim, better quality)")
+            .addOption("Xenova/all-MiniLM-L6-v2", "All-MiniLM-L6-v2 (384-dim, fast)")
+            .addOption("Xenova/all-mpnet-base-v2", "All-mpnet-base-v2 (768-dim, better quality)")
             .setValue(this.plugin.settings.localModelName)
             .onChange(async (value: string) => {
               this.plugin.settings.localModelName = value;
@@ -99,7 +97,7 @@ export class AnamnesisSettingTab extends PluginSettingTab {
     if (this.plugin.settings.embeddingProvider === "openai") {
       const warning = containerEl.createDiv({ cls: "anamnesis-openai-warning" });
       warning.createEl("span", {
-        text: "⚠ Privacy: when using the OpenAI provider, your note content (in chunks of up to 512 characters) is sent to the OpenAI Embeddings API to compute vectors. Nothing is stored on their servers by default, but your text is processed there. The local provider (default) makes no network requests.",
+        text: "⚠ Privacy: when using the OpenAI provider, your note content (in chunks of up to 512 characters) is sent to the OpenAI embeddings API to compute vectors. Nothing is stored on their servers by default, but your text is processed there. The local provider (default) makes no network requests.",
       });
 
       new Setting(containerEl)
@@ -107,7 +105,7 @@ export class AnamnesisSettingTab extends PluginSettingTab {
         .setDesc("Stored in plugin data, never synced.")
         .addText((text) =>
           text
-            .setPlaceholder("sk-...")
+            .setPlaceholder("API key")
             .setValue(this.plugin.settings.openaiApiKey)
             .onChange(async (value: string) => {
               this.plugin.settings.openaiApiKey = value;
@@ -119,8 +117,8 @@ export class AnamnesisSettingTab extends PluginSettingTab {
         .setName("OpenAI model")
         .addDropdown((drop) =>
           drop
-            .addOption("text-embedding-3-small", "text-embedding-3-small (1536-dim)")
-            .addOption("text-embedding-3-large", "text-embedding-3-large (3072-dim)")
+            .addOption("text-embedding-3-small", "Text-embedding-3-small (1536-dim)")
+            .addOption("text-embedding-3-large", "Text-embedding-3-large (3072-dim)")
             .setValue(this.plugin.settings.openaiModelName)
             .onChange(async (value: string) => {
               this.plugin.settings.openaiModelName = value;
@@ -229,10 +227,10 @@ export class AnamnesisSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("MCP server").setHeading();
 
     new Setting(containerEl)
-      .setName("Enable MCP server")
+      .setName("Enable local HTTP server")
       .setDesc(
-        "Starts a local HTTP server so Claude Desktop (and other MCP clients) can " +
-        "search your vault in real time. Bound to 127.0.0.1 — not accessible over the network."
+        "Starts a local HTTP server that AI tools can use to search your vault in real time. " +
+        "Bound to 127.0.0.1 — not accessible over the network."
       )
       .addToggle((toggle) =>
         toggle
@@ -268,8 +266,8 @@ export class AnamnesisSettingTab extends PluginSettingTab {
         2
       );
       const snippetSetting = new Setting(containerEl)
-        .setName("Claude Desktop config")
-        .setDesc("Add this to claude_desktop_config.json under mcpServers:")
+        .setName("Claude desktop config")
+        .setDesc("Add this to claude_desktop_config.json:")
         .addButton((btn) =>
           btn
             .setIcon("copy")
@@ -299,7 +297,7 @@ export class AnamnesisSettingTab extends PluginSettingTab {
           .setButtonText("Re-index now")
           .setCta()
           .onClick(async () => {
-            new Notice("[Anamnesis] Starting full re-index…");
+            new Notice("[Anamnesis] starting full re-index…");
             await this.plugin.triggerFullIndex();
           })
       );

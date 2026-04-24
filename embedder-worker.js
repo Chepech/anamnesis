@@ -28896,6 +28896,7 @@ ctx.onmessage = async (e) => {
     }
   } else if (msg.type === "embed") {
     try {
+      if (!pipe) throw new Error("Model not initialized");
       const output = await pipe(msg.texts, { pooling: "mean", normalize: true });
       const flat = Array.from(output.data);
       ctx.postMessage({ type: "result", id: msg.id, flat, dim: embDim });

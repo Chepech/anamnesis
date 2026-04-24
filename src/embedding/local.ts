@@ -165,7 +165,8 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
     // Must be a plain filesystem path — ort-web.node.js calls
     // fs.readFileSync(path.normalize(...)) so file:// URLs get mangled.
     const wasmPath = join(this.pluginDir, "wasm") + sep;
-    const onnxEnv = (Transformers.env.backends as any)?.onnx;
+    type OnnxBackend = { wasm?: { wasmPaths: string; numThreads: number } };
+    const onnxEnv = (Transformers.env.backends as Record<string, OnnxBackend | undefined>)?.onnx;
     if (onnxEnv?.wasm) {
       onnxEnv.wasm.wasmPaths = wasmPath;
       onnxEnv.wasm.numThreads = 1;
@@ -188,7 +189,8 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
 
   private async embedMainThread(texts: string[]): Promise<number[][]> {
     if (!this.pipe) throw new Error("LocalEmbeddingProvider not initialized");
-    const output = await (this.pipe as any)(texts, { pooling: "mean", normalize: true });
+    type EmbedFn = (texts: string[], opts: { pooling: string; normalize: boolean }) => Promise<{ data: Float32Array }>;
+    const output = await (this.pipe as unknown as EmbedFn)(texts, { pooling: "mean", normalize: true });
     const flat: Float32Array = output.data;
     const dim = this.dimension;
     const results: number[][] = [];
