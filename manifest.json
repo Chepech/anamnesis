@@ -1,7 +1,7 @@
 {
   "id": "anamnesis",
   "name": "Anamnesis",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.4.0",
   "description": "Turn your vault into a searchable knowledge base with local embeddings and an MCP server.",
   "author": "Chepech",
