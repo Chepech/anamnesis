@@ -208,7 +208,7 @@ export class AnamnesisPanel extends ItemView {
 
     // ── MCP card ─────────────────────────────────────────────────────────────
     const mcpCard = root.createDiv("anamnesis-card");
-    mcpCard.createEl("p", { cls: "anamnesis-card-label", text: "MCP server" });
+    mcpCard.createEl("p", { cls: "anamnesis-card-label", text: "Local server" });
 
     const mcpRow = mcpCard.createDiv("anamnesis-status-row");
     this.mcpDotEl = mcpRow.createDiv("anamnesis-status-dot anamnesis-dot-idle");

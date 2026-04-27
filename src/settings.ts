@@ -224,7 +224,7 @@ export class AnamnesisSettingTab extends PluginSettingTab {
       );
 
     // ── MCP Server ──────────────────────────────────────────────────────────
-    new Setting(containerEl).setName("MCP server").setHeading();
+    new Setting(containerEl).setName("Local HTTP server").setHeading();
 
     new Setting(containerEl)
       .setName("Enable local HTTP server")

@@ -106,7 +106,7 @@ export default class AnamnesisPlugin extends Plugin {
 
   async triggerFullIndex(): Promise<void> {
     if (!this.indexer) {
-      new Notice("[Anamnesis] Not initialized — check settings.");
+      new Notice("[Anamnesis] not initialized — check settings.");
       return;
     }
     await this.indexer.indexAll();

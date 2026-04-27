@@ -49,7 +49,7 @@ export class SearchView extends ItemView {
 
     // ── Header ──────────────────────────────────────────────────────────────
     const header = root.createDiv("anamnesis-header");
-    header.createEl("h4", { text: "Anamnesis — Semantic search" });
+    header.createEl("h4", { text: "Semantic search" });
 
     // ── Search input ─────────────────────────────────────────────────────────
     const inputWrap = root.createDiv("anamnesis-input-wrap");

@@ -99,12 +99,12 @@ export class GraphView extends ItemView {
     for (const [folder, color] of folderColor) {
       const row = legend.createDiv("anamnesis-legend-row");
       const dot = row.createDiv("anamnesis-legend-dot");
-      dot.style.background = color;
+      dot.setCssProps({ background: color });
       row.createEl("span", { cls: "anamnesis-legend-label", text: folder });
     }
   }
 
-  async onClose(): Promise<void> {}
+  onClose(): Promise<void> { return Promise.resolve(); }
 
   // ── Graph build ────────────────────────────────────────────────────────────
 
@@ -120,7 +120,7 @@ export class GraphView extends ItemView {
     }
 
     if (chunks.length === 0) {
-      this.statusEl.setText("No indexed notes yet — run Re-index first.");
+      this.statusEl.setText("No indexed notes yet — run re-index first.");
       return;
     }
 
@@ -351,8 +351,10 @@ export class GraphView extends ItemView {
     if (found) {
       this.tooltipEl.show();
       const parentRect = (this.containerEl.children[1] as HTMLElement).getBoundingClientRect();
-      this.tooltipEl.style.left = `${e.clientX - parentRect.left + 14}px`;
-      this.tooltipEl.style.top = `${e.clientY - parentRect.top + 14}px`;
+      this.tooltipEl.setCssProps({
+        left: `${e.clientX - parentRect.left + 14}px`,
+        top: `${e.clientY - parentRect.top + 14}px`,
+      });
       this.tooltipEl.empty();
       this.tooltipEl.createEl("strong", { text: found.label, cls: "anamnesis-tooltip-title" });
       this.tooltipEl.createEl("span", { text: `${found.snippet}…`, cls: "anamnesis-tooltip-snippet" });
