@@ -1,10 +1,10 @@
 {
-  "id": "anamnesis",
-  "name": "Anamnesis",
-  "version": "1.0.1",
-  "minAppVersion": "1.7.2",
-  "description": "Turn your vault into a searchable knowledge base with local embeddings and an MCP server.",
-  "author": "Chepech",
-  "authorUrl": "https://github.com/Chepech",
-  "isDesktopOnly": true
+	"id": "anamnesis",
+	"name": "Anamnesis",
+	"version": "1.0.4",
+	"minAppVersion": "1.7.2",
+	"description": "Turn your vault into a searchable knowledge base with local embeddings and an MCP server.",
+	"author": "Chepech",
+	"authorUrl": "https://github.com/Chepech",
+	"isDesktopOnly": true
 }
