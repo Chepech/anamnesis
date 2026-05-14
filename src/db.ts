@@ -109,7 +109,7 @@ export class VectorDB {
     const vectorField = schema.fields.find((f) => f.name === "vector");
     if (!vectorField) return null;
 
-    const listType = vectorField.type as { listSize?: number };
+    const listType = vectorField.type as unknown as { listSize?: number };
     return listType.listSize ?? null;
   }
 

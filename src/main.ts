@@ -353,7 +353,7 @@ export default class AnamnesisPlugin extends Plugin {
       );
       menu.addItem((item) =>
         item
-          .setTitle("Stop mcp server")
+          .setTitle("Stop MCP server")
           .setIcon("square")
           .onClick(async () => {
             await this.mcpServer?.stop();
@@ -363,12 +363,12 @@ export default class AnamnesisPlugin extends Plugin {
     } else if (this.settings.mcpEnabled) {
       menu.addItem((item) =>
         item
-          .setTitle("Start mcp server")
+          .setTitle("Start MCP server")
           .setIcon("play")
           .onClick(() => this.startMcpServer())
       );
     } else {
-      menu.addItem((item) => item.setTitle("Mcp: Disabled").setIcon("server").setDisabled(true));
+      menu.addItem((item) => item.setTitle("MCP: Disabled").setIcon("server").setDisabled(true));
     }
 
     menu.showAtMouseEvent(evt);
@@ -486,7 +486,7 @@ export default class AnamnesisPlugin extends Plugin {
         this.mcpStatusBarEl.addClass("anamnesis-mcp-status-bar--error");
         break;
       default:
-        this.mcpStatusBarEl.title = "Mcp: Not running";
+        this.mcpStatusBarEl.title = "MCP: Not running";
         break;
     }
   }

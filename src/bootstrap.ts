@@ -27,7 +27,7 @@ export class Bootstrapper {
   constructor(app: App, manifest: PluginManifest) {
     const adapter = app.vault.adapter as { basePath?: string; getBasePath?: () => string };
     const basePath: string = adapter.basePath ?? adapter.getBasePath?.() ?? "";
-    const manifestDir = manifest.dir ?? `.obsidian/plugins/${manifest.id}`;
+    const manifestDir = manifest.dir ?? `${app.vault.configDir}/plugins/${manifest.id}`;
     this.pluginDir = path.join(basePath, manifestDir);
     this.version = manifest.version;
     this.releaseBase = `https://github.com/Chepech/anamnesis/releases/download/${this.version}`;

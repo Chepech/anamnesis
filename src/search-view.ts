@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, TFile } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, Setting } from "obsidian";
 import type { PluginSettings } from "./settings";
 import { HybridSearchEngine, SearchResult } from "./hybrid-search";
 
@@ -41,7 +41,7 @@ export class SearchView extends ItemView {
 
     // ── Header ──────────────────────────────────────────────────────────────
     const header = root.createDiv("anamnesis-header");
-    header.createEl("h4", { text: "Semantic search" });
+    new Setting(header).setName("Semantic search").setHeading();
 
     // ── Search input ─────────────────────────────────────────────────────────
     const inputWrap = root.createDiv("anamnesis-input-wrap");

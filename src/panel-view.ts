@@ -298,8 +298,8 @@ export class AnamnesisPanel extends ItemView {
     if (s.state === "indexing" || s.state === "paused") {
       const pct = s.total > 0 ? (s.current / s.total) * 100 : 0;
       this.progressEl.show();
-      const fill = this.progressEl.querySelector(".anamnesis-progress-fill") as HTMLElement;
-      if (fill) fill.style.width = `${pct}%`;
+      const fill = this.progressEl.querySelector<HTMLElement>(".anamnesis-progress-fill");
+      if (fill) fill.setCssProps({ width: `${pct}%` });
 
       this.pauseBtn.show();
       this.buildActionBtn(
@@ -326,7 +326,7 @@ export class AnamnesisPanel extends ItemView {
     const tick = () => {
       const remaining = Math.max(0, flushAt - Date.now());
       const pct = delayMs > 0 ? (remaining / delayMs) * 100 : 0;
-      this.countdownFillEl.style.width = `${pct}%`;
+      this.countdownFillEl.setCssProps({ width: `${pct}%` });
       if (remaining > 0) {
         this.rafId = window.requestAnimationFrame(tick);
       } else {
