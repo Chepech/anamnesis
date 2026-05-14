@@ -55,10 +55,7 @@ export class HybridSearchEngine {
 
     // Build id → ChunkRecord stub from BM25 hits (no vector available)
     const bm25Map = new Map<string, ChunkRecord>(
-      bm25Hits.map((h) => [
-        h.id as string,
-        { ...(h as unknown as ChunkRecord), vector: [] },
-      ])
+      bm25Hits.map((h) => [h.id as string, { ...(h as unknown as ChunkRecord), vector: [] }])
     );
 
     const results: SearchResult[] = [];
