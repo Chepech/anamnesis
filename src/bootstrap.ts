@@ -115,7 +115,7 @@ export class Bootstrapper {
     fs.mkdirSync(wasmDir, { recursive: true });
 
     for (const file of files) {
-      const url = `${this.releaseBase}/wasm/${file}`;
+      const url = `${this.releaseBase}/${file}`;
       const res = await requestUrl({ url });
       fs.writeFileSync(path.join(wasmDir, file), Buffer.from(res.arrayBuffer));
     }
