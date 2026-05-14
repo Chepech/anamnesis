@@ -15,14 +15,12 @@ import { App, TFile } from "obsidian";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import type { VectorDB, ChunkRecord } from "./db";
-import type { EmbeddingProvider } from "./embedding/bridge";
+import { HybridSearchEngine } from "./hybrid-search";
 
 export type McpStatus = "stopped" | "running" | "error";
 
 export class AnamnesisServerMCP {
-  private db: VectorDB;
-  private provider: EmbeddingProvider;
+  private hybridSearch: HybridSearchEngine;
   private app: App;
 
   private httpServer: http.Server | null = null;
@@ -30,9 +28,8 @@ export class AnamnesisServerMCP {
   private _port = 0;
   private _error = "";
 
-  constructor(db: VectorDB, provider: EmbeddingProvider, app: App) {
-    this.db = db;
-    this.provider = provider;
+  constructor(hybridSearch: HybridSearchEngine, app: App) {
+    this.hybridSearch = hybridSearch;
     this.app = app;
   }
 
@@ -134,8 +131,8 @@ export class AnamnesisServerMCP {
       "search_vault",
       {
         description:
-          "Semantic search over the Obsidian vault. Returns the most relevant chunks " +
-          "ranked by cosine similarity to the query.",
+          "Hybrid semantic + keyword search over the Obsidian vault. Combines vector similarity " +
+          "with BM25 keyword matching via Reciprocal Rank Fusion for best recall.",
         inputSchema: {
           query: z.string().min(1).describe("Natural language search query"),
           limit: z
@@ -148,10 +145,9 @@ export class AnamnesisServerMCP {
         },
       },
       async ({ query, limit }) => {
-        const [queryVec] = await this.provider.embed([query]);
-        const rows = await this.db.search(queryVec, limit);
+        const rows = await this.hybridSearch.search(query, limit);
 
-        const results = (rows as (ChunkRecord & { _distance?: number })[]).map((r) => ({
+        const results = rows.map((r) => ({
           file_path: r.file_path,
           context_path: r.context_path,
           heading: r.heading,
@@ -159,8 +155,7 @@ export class AnamnesisServerMCP {
           text: r.text,
           tags: r.tags,
           importance_score: r.importance_score,
-          // LanceDB adds _distance for vector search; cosine distance ∈ [0,2]
-          // for unit vectors, so similarity = 1 - distance/2 gives a clean [0,1] score.
+          match_sources: r.match_sources,
           score: r._distance !== undefined ? Math.max(0, 1 - r._distance / 2) : null,
         }));
 
@@ -208,7 +203,7 @@ export class AnamnesisServerMCP {
           "List all files currently in the Anamnesis vector index, with their chunk counts.",
       },
       async () => {
-        const chunks = await this.db.getAllChunks();
+        const chunks = await this.hybridSearch.db.getAllChunks();
 
         const counts = new Map<string, number>();
         for (const c of chunks) {

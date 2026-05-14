@@ -1,13 +1,11 @@
 import { ItemView, WorkspaceLeaf, TFile } from "obsidian";
-import type { VectorDB, ChunkRecord } from "./db";
-import type { EmbeddingProvider } from "./embedding/bridge";
 import type { PluginSettings } from "./settings";
+import { HybridSearchEngine, SearchResult } from "./hybrid-search";
 
 export const SEARCH_VIEW_TYPE = "anamnesis-search";
 
 export class SearchView extends ItemView {
-  private vectorDB: VectorDB;
-  private provider: EmbeddingProvider;
+  private hybridSearch: HybridSearchEngine;
   private settings: PluginSettings;
 
   // DOM refs
@@ -18,15 +16,9 @@ export class SearchView extends ItemView {
   // Debounce
   private debounceTimer: number | null = null;
 
-  constructor(
-    leaf: WorkspaceLeaf,
-    vectorDB: VectorDB,
-    provider: EmbeddingProvider,
-    settings: PluginSettings
-  ) {
+  constructor(leaf: WorkspaceLeaf, hybridSearch: HybridSearchEngine, settings: PluginSettings) {
     super(leaf);
-    this.vectorDB = vectorDB;
-    this.provider = provider;
+    this.hybridSearch = hybridSearch;
     this.settings = settings;
   }
 
@@ -35,7 +27,7 @@ export class SearchView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Semantic search";
+    return "Search";
   }
 
   getIcon(): string {
@@ -103,8 +95,7 @@ export class SearchView extends ItemView {
     this.resultsEl.empty();
 
     try {
-      const [vec] = await this.provider.embed([q]);
-      const hits = await this.vectorDB.search(vec, 15, this.settings.importanceWeight);
+      const hits = await this.hybridSearch.search(q, 15);
 
       if (hits.length === 0) {
         this.statusEl.setText("No results.");
@@ -120,9 +111,9 @@ export class SearchView extends ItemView {
     }
   }
 
-  private renderResults(hits: ChunkRecord[]): void {
+  private renderResults(hits: SearchResult[]): void {
     // Group by file so the same file doesn't repeat awkwardly
-    const byFile = new Map<string, ChunkRecord[]>();
+    const byFile = new Map<string, SearchResult[]>();
     for (const hit of hits) {
       const arr = byFile.get(hit.file_path) ?? [];
       arr.push(hit);
@@ -143,6 +134,19 @@ export class SearchView extends ItemView {
         e.preventDefault();
         void this.openFile(filePath);
       });
+
+      // Match source badges — shown once per card
+      const sources = chunks[0].match_sources;
+      if (sources.length > 0) {
+        const badgesEl = titleRow.createDiv("anamnesis-match-badges");
+        for (const src of sources) {
+          badgesEl.createEl("span", {
+            text: src === "semantic" ? "~" : "K",
+            cls: `anamnesis-match-badge anamnesis-match-badge--${src}`,
+            attr: { title: src === "semantic" ? "Semantic match" : "Keyword match" },
+          });
+        }
+      }
 
       // Snippet(s)
       for (const chunk of chunks.slice(0, 2)) {

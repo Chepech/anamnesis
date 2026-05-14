@@ -12,6 +12,8 @@ import { GraphView, GRAPH_VIEW_TYPE } from "./graph-view";
 import { AnamnesisPanel, PANEL_VIEW_TYPE } from "./panel-view";
 import { AnamnesisServerMCP } from "./mcp-server";
 import { Bootstrapper } from "./bootstrap";
+import { FTSIndex } from "./fts";
+import { HybridSearchEngine } from "./hybrid-search";
 
 export default class AnamnesisPlugin extends Plugin {
   settings!: PluginSettings;
@@ -21,6 +23,8 @@ export default class AnamnesisPlugin extends Plugin {
   private indexer: IndexingEngine | null = null;
   private watcher: VaultWatcher | null = null;
   private mcpServer: AnamnesisServerMCP | null = null;
+  private ftsIndex: FTSIndex | null = null;
+  private hybridSearch: HybridSearchEngine | null = null;
   private statusBarEl: HTMLElement | null = null;
   private mcpStatusBarEl: HTMLElement | null = null;
   private currentStatus: IndexStatus = { state: "idle" };
@@ -55,10 +59,10 @@ export default class AnamnesisPlugin extends Plugin {
     });
 
     this.registerView(SEARCH_VIEW_TYPE, (leaf) => {
-      if (!this.vectorDB || !this.provider) {
+      if (!this.hybridSearch) {
         throw new Error("[Anamnesis] Core not initialized yet — reload plugin.");
       }
-      return new SearchView(leaf, this.vectorDB, this.provider, this.settings);
+      return new SearchView(leaf, this.hybridSearch, this.settings);
     });
 
     this.registerView(GRAPH_VIEW_TYPE, (leaf) => {
@@ -168,13 +172,25 @@ export default class AnamnesisPlugin extends Plugin {
     // indexAll() will drop and recreate it with the correct schema on re-index.
     await this.vectorDB.ensureTable();
 
+    this.ftsIndex = new FTSIndex();
+    this.hybridSearch = new HybridSearchEngine(
+      this.vectorDB,
+      this.ftsIndex,
+      this.provider,
+      this.settings
+    );
+
     this.indexer = new IndexingEngine(
       this.app,
       this.vectorDB,
       this.provider,
       this.settings,
-      (status) => this.setStatus(status)
+      (status) => this.setStatus(status),
+      this.ftsIndex
     );
+
+    // Background FTS rebuild from existing index data (non-blocking)
+    void this.ftsIndex.rebuildFromDB(this.vectorDB);
 
     // Determine whether we need a full reindex on this startup:
     //   - First-ever load: initialIndexDone is false
@@ -226,7 +242,7 @@ export default class AnamnesisPlugin extends Plugin {
 
     // MCP server — start after core is ready so tools have a live DB + provider
     if (this.settings.mcpEnabled) {
-      this.mcpServer = new AnamnesisServerMCP(this.vectorDB, this.provider, this.app);
+      this.mcpServer = new AnamnesisServerMCP(this.hybridSearch, this.app);
       await this.startMcpServer();
     }
 
@@ -476,10 +492,10 @@ export default class AnamnesisPlugin extends Plugin {
   }
 
   private async startMcpServer(): Promise<void> {
-    if (!this.vectorDB || !this.provider) return;
+    if (!this.hybridSearch) return;
     // Create the server lazily — it may not exist if mcpEnabled was off at startup
     if (!this.mcpServer) {
-      this.mcpServer = new AnamnesisServerMCP(this.vectorDB, this.provider, this.app);
+      this.mcpServer = new AnamnesisServerMCP(this.hybridSearch, this.app);
     }
     try {
       await this.mcpServer.start(this.settings.mcpPort);
@@ -507,7 +523,7 @@ export default class AnamnesisPlugin extends Plugin {
 
   /** Called on saveSettings — restart MCP if enabled/port changed. */
   private async syncMcpServer(): Promise<void> {
-    if (!this.vectorDB || !this.provider) return; // core not ready yet
+    if (!this.hybridSearch) return; // core not ready yet
 
     if (!this.settings.mcpEnabled) {
       await this.mcpServer?.stop();
@@ -521,7 +537,7 @@ export default class AnamnesisPlugin extends Plugin {
     const wasRunning = this.mcpServer?.status === "running";
 
     if (!this.mcpServer) {
-      this.mcpServer = new AnamnesisServerMCP(this.vectorDB, this.provider, this.app);
+      this.mcpServer = new AnamnesisServerMCP(this.hybridSearch, this.app);
     }
 
     if (!wasRunning || portChanged) {

@@ -29,6 +29,8 @@ export interface PluginSettings {
   importanceWeight: number;
   /** True after the first successful indexAll completes. Prevents auto-reindex on every startup. */
   initialIndexDone: boolean;
+  /** Combine BM25 keyword matching with semantic search via Reciprocal Rank Fusion. */
+  hybridSearch: boolean;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -46,6 +48,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   mcpPort: 8868,
   importanceWeight: 0.05,
   initialIndexDone: false,
+  hybridSearch: true,
 };
 
 export class AnamnesisSettingTab extends PluginSettingTab {
@@ -211,6 +214,19 @@ export class AnamnesisSettingTab extends PluginSettingTab {
             this.plugin.settings.importanceWeight = value;
             await this.plugin.saveSettings();
           })
+      );
+
+    new Setting(containerEl)
+      .setName("Hybrid search")
+      .setDesc(
+        "Combines semantic similarity with BM25 keyword matching using Reciprocal Rank Fusion. " +
+          "Improves recall for exact-term queries. Disable to use pure semantic search only."
+      )
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.hybridSearch).onChange(async (value: boolean) => {
+          this.plugin.settings.hybridSearch = value;
+          await this.plugin.saveSettings();
+        })
       );
 
     // ── MCP Server ──────────────────────────────────────────────────────────
