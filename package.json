@@ -1,6 +1,6 @@
 {
   "name": "anamnesis",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Anamnesis — local-first RAG system for Obsidian vaults with semantic search and MCP server",
   "main": "main.js",
   "scripts": {
