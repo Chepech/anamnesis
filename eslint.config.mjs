@@ -3,6 +3,10 @@ import tsParser from "@typescript-eslint/parser";
 import obsidian from "eslint-plugin-obsidianmd";
 
 export default [
+  // Obsidian plugin rules (flat config array — includes TypeScript parser and rules)
+  ...obsidian.configs.recommended,
+
+  // Augment with type-aware parsing and additional rules scoped to src/
   {
     files: ["src/**/*.ts"],
     languageOptions: {
@@ -11,10 +15,8 @@ export default [
     },
     plugins: {
       "@typescript-eslint": tsPlugin,
-      obsidianmd: obsidian,
     },
     rules: {
-      ...obsidian.configs.all.rules,
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unnecessary-type-assertion": "error",
       "@typescript-eslint/require-await": "error",

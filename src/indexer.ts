@@ -63,7 +63,7 @@ export class IndexingEngine {
 
   // Progress state shared with fileToRecords for inter-batch pause responsiveness
   private _indexingCurrent = 0;
-  private _indexingTotal   = 0;
+  private _indexingTotal = 0;
 
   constructor(
     app: App,
@@ -79,9 +79,15 @@ export class IndexingEngine {
     this.onStatus = onStatus;
   }
 
-  get isRunning(): boolean { return this._running; }
-  get isPaused(): boolean { return this._paused; }
-  get lastIndexedCount(): number { return this._lastIndexedCount; }
+  get isRunning(): boolean {
+    return this._running;
+  }
+  get isPaused(): boolean {
+    return this._paused;
+  }
+  get lastIndexedCount(): number {
+    return this._lastIndexedCount;
+  }
 
   pause(): void {
     if (!this._running || this._paused) return;
@@ -123,14 +129,14 @@ export class IndexingEngine {
 
       // Initialise the live queue from the current vault snapshot
       this._indexQueue = this.getIndexableFiles();
-      this._indexQueuePaths = new Set(this._indexQueue.map(f => f.path));
+      this._indexQueuePaths = new Set(this._indexQueue.map((f) => f.path));
       const initialTotal = this._indexQueue.length;
       console.debug(`[Anamnesis] Starting full index: ${initialTotal} files`);
       this.onStatus({ state: "indexing", current: 0, total: initialTotal });
 
       let processed = 0;
       this._indexingCurrent = 0;
-      this._indexingTotal   = initialTotal;
+      this._indexingTotal = initialTotal;
 
       while (this._indexQueue.length > 0) {
         const file = this._indexQueue.shift()!;
@@ -142,7 +148,9 @@ export class IndexingEngine {
         // ── Pause checkpoint ────────────────────────────────────────────────
         if (this._paused) {
           this.onStatus({ state: "paused", current: processed, total: currentTotal });
-          await new Promise<void>(resolve => { this._pauseResolve = resolve; });
+          await new Promise<void>((resolve) => {
+            this._pauseResolve = resolve;
+          });
         }
 
         if (this._cancelled) break;
@@ -151,13 +159,20 @@ export class IndexingEngine {
         // File may have been deleted or moved while this loop was running
         const stillExists = this.app.vault.getAbstractFileByPath(file.path) instanceof TFile;
         if (!stillExists) {
-          console.warn(`[Anamnesis] Skipping "${file.basename}" — no longer in vault (deleted/moved mid-reindex)`);
+          console.warn(
+            `[Anamnesis] Skipping "${file.basename}" — no longer in vault (deleted/moved mid-reindex)`
+          );
           processed++;
           this._indexingCurrent = processed;
           continue;
         }
 
-        this.onStatus({ state: "indexing", current: processed, total: currentTotal, label: file.basename });
+        this.onStatus({
+          state: "indexing",
+          current: processed,
+          total: currentTotal,
+          label: file.basename,
+        });
         this._indexingCurrent = processed;
 
         try {
@@ -172,7 +187,9 @@ export class IndexingEngine {
         this._indexingCurrent = processed;
 
         if (processed % 25 === 0) {
-          console.debug(`[Anamnesis] Indexed ${processed} / ${processed + this._indexQueue.length}`);
+          console.debug(
+            `[Anamnesis] Indexed ${processed} / ${processed + this._indexQueue.length}`
+          );
         }
       }
 
@@ -243,8 +260,12 @@ export class IndexingEngine {
     this._running = true;
     this._cancelled = false;
     const total = files.length;
-    this.onStatus({ state: "indexing", current: 0, total,
-      label: `${total} file${total === 1 ? "" : "s"}` });
+    this.onStatus({
+      state: "indexing",
+      current: 0,
+      total,
+      label: `${total} file${total === 1 ? "" : "s"}`,
+    });
 
     try {
       const table = await this.db.openTable();
@@ -311,7 +332,9 @@ export class IndexingEngine {
     const configDir = this.app.vault.configDir;
     if (path.startsWith(configDir)) return true;
     const patterns = this.settings.excludePatterns
-      .split("\n").map((p) => p.trim()).filter(Boolean);
+      .split("\n")
+      .map((p) => p.trim())
+      .filter(Boolean);
     return patterns.some((p) => path.startsWith(p) || path.includes(`/${p}/`));
   }
 
@@ -323,7 +346,7 @@ export class IndexingEngine {
     // ── Frontmatter tags (Strategy 3) ──────────────────────────────────────
     const fileCache = this.app.metadataCache.getFileCache(file);
     const fm = fileCache?.frontmatter ?? {};
-    const rawTags = fm.tags;
+    const rawTags: unknown = fm.tags;
     const tags = Array.isArray(rawTags)
       ? rawTags.join(", ")
       : typeof rawTags === "string"
@@ -339,9 +362,7 @@ export class IndexingEngine {
     // ── Breadcrumb injection (Strategy 1) ──────────────────────────────────
     const title = file.basename;
     const embedTexts = chunks.map((c, idx) => {
-      const crumb = c.context_path
-        ? `[${title}] > [${c.context_path}]`
-        : `[${title}]`;
+      const crumb = c.context_path ? `[${title}] > [${c.context_path}]` : `[${title}]`;
       const crumbTrimmed =
         crumb.length > BREADCRUMB_MAX_CHARS
           ? crumb.slice(0, BREADCRUMB_MAX_CHARS - 3) + "..."
@@ -364,7 +385,9 @@ export class IndexingEngine {
           current: this._indexingCurrent,
           total: this._indexingTotal,
         });
-        await new Promise<void>(resolve => { this._pauseResolve = resolve; });
+        await new Promise<void>((resolve) => {
+          this._pauseResolve = resolve;
+        });
         if (this._cancelled) return [];
       }
 

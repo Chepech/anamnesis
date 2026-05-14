@@ -6,9 +6,18 @@ export const GRAPH_VIEW_TYPE = "anamnesis-graph";
 
 // One colour per top-level folder (cycles after 12)
 const PALETTE = [
-  "#7c8cff", "#ff7c8c", "#7cffb0", "#ffd97c",
-  "#c87cff", "#7ce8ff", "#ff9f7c", "#b0ff7c",
-  "#ff7ce8", "#7cccff", "#ffe07c", "#a0ffc8",
+  "#7c8cff",
+  "#ff7c8c",
+  "#7cffb0",
+  "#ffd97c",
+  "#c87cff",
+  "#7ce8ff",
+  "#ff9f7c",
+  "#b0ff7c",
+  "#ff7ce8",
+  "#7cccff",
+  "#ffe07c",
+  "#a0ffc8",
 ];
 
 // Edges per node — top-K nearest neighbours get a line
@@ -52,9 +61,15 @@ export class GraphView extends ItemView {
     this.vectorDB = vectorDB;
   }
 
-  getViewType(): string { return GRAPH_VIEW_TYPE; }
-  getDisplayText(): string { return "Anamnesis graph"; }
-  getIcon(): string { return "git-fork"; }
+  getViewType(): string {
+    return GRAPH_VIEW_TYPE;
+  }
+  getDisplayText(): string {
+    return "Anamnesis graph";
+  }
+  getIcon(): string {
+    return "git-fork";
+  }
 
   async onOpen(): Promise<void> {
     const root = this.containerEl.children[1] as HTMLElement;
@@ -74,7 +89,9 @@ export class GraphView extends ItemView {
       this.nodes = [];
       this.edges = [];
       this.draw(); // clear canvas immediately
-      void this.buildGraph().finally(() => { rebuildBtn.disabled = false; });
+      void this.buildGraph().finally(() => {
+        rebuildBtn.disabled = false;
+      });
     });
 
     this.canvasEl = root.createEl("canvas", { cls: "anamnesis-graph-canvas" });
@@ -104,7 +121,9 @@ export class GraphView extends ItemView {
     }
   }
 
-  onClose(): Promise<void> { return Promise.resolve(); }
+  onClose(): Promise<void> {
+    return Promise.resolve();
+  }
 
   // ── Graph build ────────────────────────────────────────────────────────────
 
@@ -134,7 +153,6 @@ export class GraphView extends ItemView {
       }
     }
 
-
     // Convert vectors from whatever LanceDB returns (Float32Array subarray)
     // to plain number[] that UMAP can safely iterate
     const vectors: number[][] = unique.map((c) =>
@@ -148,7 +166,8 @@ export class GraphView extends ItemView {
     let colorIdx = 0;
     const getColor = (fp: string) => {
       const folder = fp.includes("/") ? fp.split("/")[0] : "root";
-      if (!this.folderColor.has(folder)) this.folderColor.set(folder, PALETTE[colorIdx++ % PALETTE.length]);
+      if (!this.folderColor.has(folder))
+        this.folderColor.set(folder, PALETTE[colorIdx++ % PALETTE.length]);
       return this.folderColor.get(folder)!;
     };
 
@@ -172,10 +191,15 @@ export class GraphView extends ItemView {
     }
 
     // Normalise to [0, 1]
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
     for (const [x, y] of coords) {
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      if (y < minY) minY = y; if (y > maxY) maxY = y;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
     }
     const rX = maxX - minX || 1;
     const rY = maxY - minY || 1;
@@ -275,24 +299,31 @@ export class GraphView extends ItemView {
   private bindEvents(): void {
     const c = this.canvasEl;
 
-    const ro = new ResizeObserver(() => { this.resizeCanvas(); this.draw(); });
+    const ro = new ResizeObserver(() => {
+      this.resizeCanvas();
+      this.draw();
+    });
     ro.observe(c);
     this.register(() => ro.disconnect());
 
-    c.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      const rect = c.getBoundingClientRect();
-      // Zoom toward mouse position
-      const mx = (e.clientX - rect.left - 48) / ((this.cw - 96) * this.zoom);
-      const my = (e.clientY - rect.top - 48) / ((this.ch - 96) * this.zoom);
-      const factor = e.deltaY < 0 ? 1.12 : 0.9;
-      const newZoom = Math.max(0.2, Math.min(20, this.zoom * factor));
-      // Adjust pan so zoom is centered on mouse
-      this.pan.x = mx - (mx - this.pan.x) * (newZoom / this.zoom);
-      this.pan.y = my - (my - this.pan.y) * (newZoom / this.zoom);
-      this.zoom = newZoom;
-      this.draw();
-    }, { passive: false });
+    c.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        const rect = c.getBoundingClientRect();
+        // Zoom toward mouse position
+        const mx = (e.clientX - rect.left - 48) / ((this.cw - 96) * this.zoom);
+        const my = (e.clientY - rect.top - 48) / ((this.ch - 96) * this.zoom);
+        const factor = e.deltaY < 0 ? 1.12 : 0.9;
+        const newZoom = Math.max(0.2, Math.min(20, this.zoom * factor));
+        // Adjust pan so zoom is centered on mouse
+        this.pan.x = mx - (mx - this.pan.x) * (newZoom / this.zoom);
+        this.pan.y = my - (my - this.pan.y) * (newZoom / this.zoom);
+        this.zoom = newZoom;
+        this.draw();
+      },
+      { passive: false }
+    );
 
     c.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
@@ -340,7 +371,10 @@ export class GraphView extends ItemView {
     let found: GraphNode | null = null;
     for (const node of this.nodes) {
       const { sx, sy } = toScreen(node.x, node.y);
-      if (Math.hypot(cx - sx, cy - sy) < hitRadius) { found = node; break; }
+      if (Math.hypot(cx - sx, cy - sy) < hitRadius) {
+        found = node;
+        break;
+      }
     }
 
     if (found !== this.hoveredNode) {
@@ -357,7 +391,10 @@ export class GraphView extends ItemView {
       });
       this.tooltipEl.empty();
       this.tooltipEl.createEl("strong", { text: found.label, cls: "anamnesis-tooltip-title" });
-      this.tooltipEl.createEl("span", { text: `${found.snippet}…`, cls: "anamnesis-tooltip-snippet" });
+      this.tooltipEl.createEl("span", {
+        text: `${found.snippet}…`,
+        cls: "anamnesis-tooltip-snippet",
+      });
     } else {
       this.tooltipEl.hide();
     }
@@ -380,8 +417,12 @@ export class GraphView extends ItemView {
     this.ctx.scale(dpr, dpr);
   }
 
-  private get cw(): number { return this.canvasEl.clientWidth; }
-  private get ch(): number { return this.canvasEl.clientHeight; }
+  private get cw(): number {
+    return this.canvasEl.clientWidth;
+  }
+  private get ch(): number {
+    return this.canvasEl.clientHeight;
+  }
 
   private async openFile(filePath: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(filePath);
@@ -395,7 +436,9 @@ export class GraphView extends ItemView {
 // ── k-NN edge computation ──────────────────────────────────────────────────
 
 function cosine(a: number[], b: number[]): number {
-  let dot = 0, na = 0, nb = 0;
+  let dot = 0,
+    na = 0,
+    nb = 0;
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i];
     na += a[i] * a[i];

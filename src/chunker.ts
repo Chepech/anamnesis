@@ -1,7 +1,7 @@
 export interface Chunk {
   text: string;
-  heading: string;       // last heading seen — preserved for compatibility
-  context_path: string;  // full hierarchy: "Infrastructure > Database > Migration"
+  heading: string; // last heading seen — preserved for compatibility
+  context_path: string; // full hierarchy: "Infrastructure > Database > Migration"
   chunkIndex: number;
 }
 

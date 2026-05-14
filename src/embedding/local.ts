@@ -1,6 +1,6 @@
 import { join, sep } from "path";
 import { pathToFileURL } from "url";
-import type { EmbeddingProvider } from "./bridge";
+import type { EmbeddingProvider, WorkerToMainMsg } from "./bridge";
 
 // Static import — bundled into main.js by esbuild so Electron's runtime
 // resolver is never involved. All ESM deps are resolved at build time.
@@ -89,16 +89,17 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
 
     return new Promise<void>((resolve, reject) => {
       // Allow up to 2 minutes for first-run model download
-      const timeout = setTimeout(() => {
+      const timeout = window.setTimeout(() => {
         reject(new Error("Worker init timeout after 2 minutes"));
       }, 120_000);
 
-      this.worker!.onmessage = (e: MessageEvent) => {
+      this.worker!.onmessage = (e: MessageEvent<WorkerToMainMsg>) => {
         const msg = e.data;
         if (msg.type === "ready") {
-          clearTimeout(timeout);
+          window.clearTimeout(timeout);
           // Switch to steady-state message handler
-          this.worker!.onmessage = (ev) => this.handleWorkerMessage(ev);
+          this.worker!.onmessage = (ev: MessageEvent<WorkerToMainMsg>) =>
+            this.handleWorkerMessage(ev);
           resolve();
         } else if (msg.type === "progress") {
           if (msg.status === "downloading") {
@@ -107,13 +108,13 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
           }
         } else if (msg.type === "error" && msg.id === undefined) {
           // Init-phase error — no embed id
-          clearTimeout(timeout);
+          window.clearTimeout(timeout);
           reject(new Error(msg.message ?? "Unknown worker error"));
         }
       };
 
       this.worker!.onerror = (e) => {
-        clearTimeout(timeout);
+        window.clearTimeout(timeout);
         reject(new Error(e.message ?? "Worker load error"));
       };
 
@@ -129,14 +130,13 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
     });
   }
 
-  private handleWorkerMessage(e: MessageEvent): void {
+  private handleWorkerMessage(e: MessageEvent<WorkerToMainMsg>): void {
     const msg = e.data;
     if (msg.type === "result") {
       const pending = this.pendingEmbeds.get(msg.id);
       if (!pending) return;
       this.pendingEmbeds.delete(msg.id);
-      const dim = msg.dim as number;
-      const flat = msg.flat as number[];
+      const { dim, flat } = msg;
       const results: number[][] = [];
       for (let i = 0; i < pending.count; i++) {
         results.push(flat.slice(i * dim, (i + 1) * dim));
@@ -189,8 +189,14 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
 
   private async embedMainThread(texts: string[]): Promise<number[][]> {
     if (!this.pipe) throw new Error("LocalEmbeddingProvider not initialized");
-    type EmbedFn = (texts: string[], opts: { pooling: string; normalize: boolean }) => Promise<{ data: Float32Array }>;
-    const output = await (this.pipe as unknown as EmbedFn)(texts, { pooling: "mean", normalize: true });
+    type EmbedFn = (
+      texts: string[],
+      opts: { pooling: string; normalize: boolean }
+    ) => Promise<{ data: Float32Array }>;
+    const output = await (this.pipe as unknown as EmbedFn)(texts, {
+      pooling: "mean",
+      normalize: true,
+    });
     const flat: Float32Array = output.data;
     const dim = this.dimension;
     const results: number[][] = [];

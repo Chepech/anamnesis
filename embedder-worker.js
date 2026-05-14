@@ -28887,7 +28887,12 @@ ctx.onmessage = async (e) => {
       embDim = msg.dim ?? 384;
       pipe = await pipeline("feature-extraction", msg.modelName, {
         progress_callback: (p) => {
-          ctx.postMessage({ type: "progress", status: p.status, file: p.file, progress: p.progress });
+          ctx.postMessage({
+            type: "progress",
+            status: p.status,
+            file: p.file,
+            progress: p.progress
+          });
         }
       });
       ctx.postMessage({ type: "ready" });
@@ -28897,11 +28902,18 @@ ctx.onmessage = async (e) => {
   } else if (msg.type === "embed") {
     try {
       if (!pipe) throw new Error("Model not initialized");
-      const output = await pipe(msg.texts, { pooling: "mean", normalize: true });
+      const output = await pipe(msg.texts, {
+        pooling: "mean",
+        normalize: true
+      });
       const flat = Array.from(output.data);
       ctx.postMessage({ type: "result", id: msg.id, flat, dim: embDim });
     } catch (err) {
-      ctx.postMessage({ type: "error", id: msg.id, message: err instanceof Error ? err.message : String(err) });
+      ctx.postMessage({
+        type: "error",
+        id: msg.id,
+        message: err instanceof Error ? err.message : String(err)
+      });
     }
   }
 };

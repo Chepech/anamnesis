@@ -84,7 +84,7 @@ export class AnamnesisSettingTab extends PluginSettingTab {
         .setDesc("Model identifier used for embedding. Changing this requires a full re-index.")
         .addDropdown((drop) =>
           drop
-            .addOption("Xenova/all-MiniLM-L6-v2", "All-MiniLM-L6-v2 (384-dim, fast)")
+            .addOption("Xenova/all-MiniLM-L6-v2", "All-minilm-l6-v2 (384-dim, fast)")
             .addOption("Xenova/all-mpnet-base-v2", "All-mpnet-base-v2 (768-dim, better quality)")
             .setValue(this.plugin.settings.localModelName)
             .onChange(async (value: string) => {
@@ -113,18 +113,16 @@ export class AnamnesisSettingTab extends PluginSettingTab {
             })
         );
 
-      new Setting(containerEl)
-        .setName("OpenAI model")
-        .addDropdown((drop) =>
-          drop
-            .addOption("text-embedding-3-small", "Text-embedding-3-small (1536-dim)")
-            .addOption("text-embedding-3-large", "Text-embedding-3-large (3072-dim)")
-            .setValue(this.plugin.settings.openaiModelName)
-            .onChange(async (value: string) => {
-              this.plugin.settings.openaiModelName = value;
-              await this.plugin.saveSettings();
-            })
-        );
+      new Setting(containerEl).setName("OpenAI model").addDropdown((drop) =>
+        drop
+          .addOption("text-embedding-3-small", "Text-embedding-3-small (1536-dim)")
+          .addOption("text-embedding-3-large", "Text-embedding-3-large (3072-dim)")
+          .setValue(this.plugin.settings.openaiModelName)
+          .onChange(async (value: string) => {
+            this.plugin.settings.openaiModelName = value;
+            await this.plugin.saveSettings();
+          })
+      );
     }
 
     // ── Indexing ────────────────────────────────────────────────────────────
@@ -134,20 +132,18 @@ export class AnamnesisSettingTab extends PluginSettingTab {
       .setName("Auto-index on change")
       .setDesc("Re-embed modified notes in the background.")
       .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.autoIndexOnChange)
-          .onChange(async (value: boolean) => {
-            this.plugin.settings.autoIndexOnChange = value;
-            await this.plugin.saveSettings();
-          })
+        toggle.setValue(this.plugin.settings.autoIndexOnChange).onChange(async (value: boolean) => {
+          this.plugin.settings.autoIndexOnChange = value;
+          await this.plugin.saveSettings();
+        })
       );
 
     new Setting(containerEl)
       .setName("Indexing strategy")
       .setDesc(
         "Conservative (30 s): waits 30 seconds after the last change before writing to the index — " +
-        "great for heavy editing sessions. " +
-        "Aggressive (5 s): picks up changes within 5 seconds at the cost of more frequent writes."
+          "great for heavy editing sessions. " +
+          "Aggressive (5 s): picks up changes within 5 seconds at the cost of more frequent writes."
       )
       .addDropdown((drop) =>
         drop
@@ -164,42 +160,36 @@ export class AnamnesisSettingTab extends PluginSettingTab {
       .setName("Chunk size")
       .setDesc("Max characters per chunk (default 512).")
       .addText((text) =>
-        text
-          .setValue(String(this.plugin.settings.chunkSize))
-          .onChange(async (value: string) => {
-            const n = parseInt(value, 10);
-            if (!isNaN(n) && n >= 64) {
-              this.plugin.settings.chunkSize = n;
-              await this.plugin.saveSettings();
-            }
-          })
+        text.setValue(String(this.plugin.settings.chunkSize)).onChange(async (value: string) => {
+          const n = parseInt(value, 10);
+          if (!isNaN(n) && n >= 64) {
+            this.plugin.settings.chunkSize = n;
+            await this.plugin.saveSettings();
+          }
+        })
       );
 
     new Setting(containerEl)
       .setName("Chunk overlap")
       .setDesc("Characters of overlap between consecutive chunks (default 64).")
       .addText((text) =>
-        text
-          .setValue(String(this.plugin.settings.chunkOverlap))
-          .onChange(async (value: string) => {
-            const n = parseInt(value, 10);
-            if (!isNaN(n) && n >= 0) {
-              this.plugin.settings.chunkOverlap = n;
-              await this.plugin.saveSettings();
-            }
-          })
+        text.setValue(String(this.plugin.settings.chunkOverlap)).onChange(async (value: string) => {
+          const n = parseInt(value, 10);
+          if (!isNaN(n) && n >= 0) {
+            this.plugin.settings.chunkOverlap = n;
+            await this.plugin.saveSettings();
+          }
+        })
       );
 
     new Setting(containerEl)
       .setName("Exclude patterns")
       .setDesc("One folder or glob per line. Matching files are skipped.")
       .addTextArea((area) =>
-        area
-          .setValue(this.plugin.settings.excludePatterns)
-          .onChange(async (value: string) => {
-            this.plugin.settings.excludePatterns = value;
-            await this.plugin.saveSettings();
-          })
+        area.setValue(this.plugin.settings.excludePatterns).onChange(async (value: string) => {
+          this.plugin.settings.excludePatterns = value;
+          await this.plugin.saveSettings();
+        })
       );
 
     // ── Search ──────────────────────────────────────────────────────────────
@@ -209,8 +199,8 @@ export class AnamnesisSettingTab extends PluginSettingTab {
       .setName("Graph importance boost")
       .setDesc(
         "How much to boost notes that are heavily linked to by other notes. " +
-        "0 = pure semantic similarity. 0.05 is a subtle nudge; 0.2+ makes backlink count dominant. " +
-        "Takes effect immediately — no re-index needed."
+          "0 = pure semantic similarity. 0.05 is a subtle nudge; 0.2+ makes backlink count dominant. " +
+          "Takes effect immediately — no re-index needed."
       )
       .addSlider((slider) =>
         slider
@@ -230,16 +220,14 @@ export class AnamnesisSettingTab extends PluginSettingTab {
       .setName("Enable local HTTP server")
       .setDesc(
         "Starts a local HTTP server that AI tools can use to search your vault in real time. " +
-        "Bound to 127.0.0.1 — not accessible over the network."
+          "Bound to 127.0.0.1 — not accessible over the network."
       )
       .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.mcpEnabled)
-          .onChange(async (value: boolean) => {
-            this.plugin.settings.mcpEnabled = value;
-            await this.plugin.saveSettings();
-            this.display();
-          })
+        toggle.setValue(this.plugin.settings.mcpEnabled).onChange(async (value: boolean) => {
+          this.plugin.settings.mcpEnabled = value;
+          await this.plugin.saveSettings();
+          this.display();
+        })
       );
 
     if (this.plugin.settings.mcpEnabled) {
@@ -247,15 +235,13 @@ export class AnamnesisSettingTab extends PluginSettingTab {
         .setName("Port")
         .setDesc("Restart the plugin after changing the port.")
         .addText((text) =>
-          text
-            .setValue(String(this.plugin.settings.mcpPort))
-            .onChange(async (value: string) => {
-              const n = parseInt(value, 10);
-              if (!isNaN(n) && n >= 1024 && n <= 65535) {
-                this.plugin.settings.mcpPort = n;
-                await this.plugin.saveSettings();
-              }
-            })
+          text.setValue(String(this.plugin.settings.mcpPort)).onChange(async (value: string) => {
+            const n = parseInt(value, 10);
+            if (!isNaN(n) && n >= 1024 && n <= 65535) {
+              this.plugin.settings.mcpPort = n;
+              await this.plugin.saveSettings();
+            }
+          })
         );
 
       // Claude Desktop config snippet
@@ -267,7 +253,7 @@ export class AnamnesisSettingTab extends PluginSettingTab {
       );
       const snippetSetting = new Setting(containerEl)
         .setName("Claude desktop config")
-        .setDesc("Add this to claude_desktop_config.json:")
+        .setDesc("Add this to Claude_desktop_config.json:")
         .addButton((btn) =>
           btn
             .setIcon("copy")
@@ -276,7 +262,7 @@ export class AnamnesisSettingTab extends PluginSettingTab {
               await navigator.clipboard.writeText(snippet);
               btn.setIcon("check");
               btn.buttonEl.addClass("anamnesis-copy-success");
-              setTimeout(() => {
+              window.setTimeout(() => {
                 btn.setIcon("copy");
                 btn.buttonEl.removeClass("anamnesis-copy-success");
               }, 2000);
@@ -297,7 +283,7 @@ export class AnamnesisSettingTab extends PluginSettingTab {
           .setButtonText("Re-index now")
           .setCta()
           .onClick(async () => {
-            new Notice("[Anamnesis] starting full re-index…");
+            new Notice("[anamnesis] starting full re-index…");
             await this.plugin.triggerFullIndex();
           })
       );

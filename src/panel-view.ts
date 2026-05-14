@@ -64,9 +64,15 @@ export class AnamnesisPanel extends ItemView {
     this.onMcpStop = callbacks.onMcpStop;
   }
 
-  getViewType(): string { return PANEL_VIEW_TYPE; }
-  getDisplayText(): string { return "Anamnesis"; }
-  getIcon(): string { return "database"; }
+  getViewType(): string {
+    return PANEL_VIEW_TYPE;
+  }
+  getDisplayText(): string {
+    return "Anamnesis";
+  }
+  getIcon(): string {
+    return "database";
+  }
 
   async onOpen(): Promise<void> {
     const root = this.containerEl.children[1] as HTMLElement;
@@ -139,12 +145,16 @@ export class AnamnesisPanel extends ItemView {
     });
 
     // Re-index
-    this.reindexBtn = actionBar.createEl("button", { cls: "anamnesis-action-btn anamnesis-action-btn--primary" });
+    this.reindexBtn = actionBar.createEl("button", {
+      cls: "anamnesis-action-btn anamnesis-action-btn--primary",
+    });
     this.reindexBtn.setAttribute("aria-label", "Re-index vault");
     this.buildActionBtn(this.reindexBtn, "database", "Re-index");
     this.reindexBtn.addEventListener("click", () => {
       this.reindexBtn.disabled = true;
-      void this.onReindex().finally(() => { this.reindexBtn.disabled = false; });
+      void this.onReindex().finally(() => {
+        this.reindexBtn.disabled = false;
+      });
     });
 
     // Semantic Search
@@ -192,19 +202,15 @@ export class AnamnesisPanel extends ItemView {
       capture?.(valEl);
     };
 
-    addStat("Chunks", "—", (el) => { this.chunkCountEl = el; });
-    addStat(
-      "Model",
-      this.settings.localModelName.split("/").pop() ?? this.settings.localModelName
-    );
+    addStat("Chunks", "—", (el) => {
+      this.chunkCountEl = el;
+    });
+    addStat("Model", this.settings.localModelName.split("/").pop() ?? this.settings.localModelName);
     addStat(
       "Provider",
       this.settings.embeddingProvider === "openai" ? "OpenAI" : "Local (offline)"
     );
-    addStat(
-      "Dimensions",
-      this.settings.embeddingProvider === "openai" ? "1536" : "384"
-    );
+    addStat("Dimensions", this.settings.embeddingProvider === "openai" ? "1536" : "384");
 
     // ── MCP card ─────────────────────────────────────────────────────────────
     const mcpCard = root.createDiv("anamnesis-card");
@@ -212,7 +218,10 @@ export class AnamnesisPanel extends ItemView {
 
     const mcpRow = mcpCard.createDiv("anamnesis-status-row");
     this.mcpDotEl = mcpRow.createDiv("anamnesis-status-dot anamnesis-dot-idle");
-    this.mcpTextEl = mcpRow.createEl("span", { cls: "anamnesis-status-label", text: "Not running" });
+    this.mcpTextEl = mcpRow.createEl("span", {
+      cls: "anamnesis-status-label",
+      text: "Not running",
+    });
 
     const addMcpStat = (label: string, value: string, capture: (el: HTMLElement) => void) => {
       const row = mcpCard.createDiv("anamnesis-stat-row");
@@ -221,12 +230,18 @@ export class AnamnesisPanel extends ItemView {
       capture(valEl);
     };
 
-    addMcpStat("Port", String(this.settings.mcpPort), (el) => { this.mcpPortEl = el; });
-    addMcpStat("URL", `http://localhost:${this.settings.mcpPort}/mcp`, (el) => { this.mcpUrlEl = el; });
+    addMcpStat("Port", String(this.settings.mcpPort), (el) => {
+      this.mcpPortEl = el;
+    });
+    addMcpStat("URL", `http://localhost:${this.settings.mcpPort}/mcp`, (el) => {
+      this.mcpUrlEl = el;
+    });
 
     const mcpBtnRow = mcpCard.createDiv("anamnesis-mcp-btn-row");
 
-    this.mcpStartBtn = mcpBtnRow.createEl("button", { cls: "anamnesis-action-btn anamnesis-action-btn--primary" });
+    this.mcpStartBtn = mcpBtnRow.createEl("button", {
+      cls: "anamnesis-action-btn anamnesis-action-btn--primary",
+    });
     this.buildActionBtn(this.mcpStartBtn, "play", "Start");
     this.mcpStartBtn.addEventListener("click", () => this.onMcpStart());
 
@@ -313,12 +328,12 @@ export class AnamnesisPanel extends ItemView {
       const pct = delayMs > 0 ? (remaining / delayMs) * 100 : 0;
       this.countdownFillEl.style.width = `${pct}%`;
       if (remaining > 0) {
-        this.rafId = requestAnimationFrame(tick);
+        this.rafId = window.requestAnimationFrame(tick);
       } else {
         this.rafId = null;
       }
     };
-    this.rafId = requestAnimationFrame(tick);
+    this.rafId = window.requestAnimationFrame(tick);
   }
 
   private stopCountdown(): void {

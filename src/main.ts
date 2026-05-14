@@ -106,7 +106,7 @@ export default class AnamnesisPlugin extends Plugin {
 
   async triggerFullIndex(): Promise<void> {
     if (!this.indexer) {
-      new Notice("[Anamnesis] not initialized — check settings.");
+      new Notice("[anamnesis] not initialized — check settings.");
       return;
     }
     await this.indexer.indexAll();
@@ -124,7 +124,11 @@ export default class AnamnesisPlugin extends Plugin {
   // ── Private ────────────────────────────────────────────────────────────────
 
   private async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.settings = Object.assign(
+      {},
+      DEFAULT_SETTINGS,
+      (await this.loadData()) as Partial<PluginSettings>
+    );
   }
 
   private async initCore(): Promise<void> {
@@ -231,9 +235,8 @@ export default class AnamnesisPlugin extends Plugin {
       this.syncPanelMcpState();
       return;
     }
-    const leaf = where === "tab"
-      ? this.app.workspace.getLeaf("tab")
-      : this.app.workspace.getRightLeaf(false);
+    const leaf =
+      where === "tab" ? this.app.workspace.getLeaf("tab") : this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     await leaf.setViewState({ type, active: true });
     void this.app.workspace.revealLeaf(leaf);
@@ -256,44 +259,67 @@ export default class AnamnesisPlugin extends Plugin {
 
     if (s.state === "indexing") {
       menu.addItem((item) =>
-        item.setTitle("Pause indexing").setIcon("pause").onClick(() => this.indexer?.pause())
+        item
+          .setTitle("Pause indexing")
+          .setIcon("pause")
+          .onClick(() => this.indexer?.pause())
       );
       menu.addItem((item) =>
-        item.setTitle("Cancel indexing").setIcon("x").onClick(() => this.indexer?.cancel())
+        item
+          .setTitle("Cancel indexing")
+          .setIcon("x")
+          .onClick(() => this.indexer?.cancel())
       );
     } else if (s.state === "paused") {
       menu.addItem((item) =>
-        item.setTitle("Resume indexing").setIcon("play").onClick(() => this.indexer?.resume())
+        item
+          .setTitle("Resume indexing")
+          .setIcon("play")
+          .onClick(() => this.indexer?.resume())
       );
       menu.addItem((item) =>
-        item.setTitle("Cancel indexing").setIcon("x").onClick(() => this.indexer?.cancel())
+        item
+          .setTitle("Cancel indexing")
+          .setIcon("x")
+          .onClick(() => this.indexer?.cancel())
       );
     } else if (s.state === "error") {
-      menu.addItem((item) =>
-        item.setTitle(`Error: ${s.message}`).setDisabled(true)
-      );
+      menu.addItem((item) => item.setTitle(`Error: ${s.message}`).setDisabled(true));
       menu.addSeparator();
       menu.addItem((item) =>
-        item.setTitle("Re-index vault").setIcon("database").onClick(() => this.triggerFullIndex())
+        item
+          .setTitle("Re-index vault")
+          .setIcon("database")
+          .onClick(() => this.triggerFullIndex())
       );
     } else if (s.state === "queued") {
       menu.addItem((item) =>
-        item.setTitle(`${s.count} file${s.count === 1 ? "" : "s"} queued — indexing soon`).setDisabled(true)
+        item
+          .setTitle(`${s.count} file${s.count === 1 ? "" : "s"} queued — indexing soon`)
+          .setDisabled(true)
       );
       menu.addSeparator();
       menu.addItem((item) =>
-        item.setTitle("Re-index vault now").setIcon("database").onClick(() => this.triggerFullIndex())
+        item
+          .setTitle("Re-index vault now")
+          .setIcon("database")
+          .onClick(() => this.triggerFullIndex())
       );
     } else {
       // idle
       menu.addItem((item) =>
-        item.setTitle("Re-index vault").setIcon("database").onClick(() => this.triggerFullIndex())
+        item
+          .setTitle("Re-index vault")
+          .setIcon("database")
+          .onClick(() => this.triggerFullIndex())
       );
     }
 
     // Always available regardless of indexing state
     menu.addItem((item) =>
-      item.setTitle("Open control panel").setIcon("layout-dashboard")
+      item
+        .setTitle("Open control panel")
+        .setIcon("layout-dashboard")
         .onClick(() => this.activateView(PANEL_VIEW_TYPE, "right"))
     );
 
@@ -302,14 +328,11 @@ export default class AnamnesisPlugin extends Plugin {
     const mcpRunning = this.mcpServer?.status === "running";
     if (mcpRunning) {
       menu.addItem((item) =>
-        item
-          .setTitle(`MCP: port ${this.mcpServer!.port}`)
-          .setIcon("server")
-          .setDisabled(true)
+        item.setTitle(`MCP: port ${this.mcpServer!.port}`).setIcon("server").setDisabled(true)
       );
       menu.addItem((item) =>
         item
-          .setTitle("Stop MCP server")
+          .setTitle("Stop mcp server")
           .setIcon("square")
           .onClick(async () => {
             await this.mcpServer?.stop();
@@ -319,14 +342,12 @@ export default class AnamnesisPlugin extends Plugin {
     } else if (this.settings.mcpEnabled) {
       menu.addItem((item) =>
         item
-          .setTitle("Start MCP server")
+          .setTitle("Start mcp server")
           .setIcon("play")
           .onClick(() => this.startMcpServer())
       );
     } else {
-      menu.addItem((item) =>
-        item.setTitle("MCP: Disabled").setIcon("server").setDisabled(true)
-      );
+      menu.addItem((item) => item.setTitle("Mcp: Disabled").setIcon("server").setDisabled(true));
     }
 
     menu.showAtMouseEvent(evt);
@@ -398,9 +419,10 @@ export default class AnamnesisPlugin extends Plugin {
         this.statusBarEl.addClass("anamnesis-status-bar--queued");
         break;
       case "indexing":
-        tooltip = status.label && status.total === 0
-          ? `Anamnesis: ${status.label}`
-          : `Anamnesis: Indexing ${status.current}/${status.total}`;
+        tooltip =
+          status.label && status.total === 0
+            ? `Anamnesis: ${status.label}`
+            : `Anamnesis: Indexing ${status.current}/${status.total}`;
         this.statusBarEl.addClass("anamnesis-status-bar--indexing");
         break;
       case "paused":
@@ -423,7 +445,8 @@ export default class AnamnesisPlugin extends Plugin {
     // Push to any open panels
     const panels = this.app.workspace.getLeavesOfType(PANEL_VIEW_TYPE);
     for (const leaf of panels) {
-      if (leaf.view instanceof AnamnesisPanel) leaf.view.updateMcpStatus(status, this.mcpServer?.port ?? 0);
+      if (leaf.view instanceof AnamnesisPanel)
+        leaf.view.updateMcpStatus(status, this.mcpServer?.port ?? 0);
     }
 
     this.mcpStatusBarEl.removeClasses([
@@ -442,7 +465,7 @@ export default class AnamnesisPlugin extends Plugin {
         this.mcpStatusBarEl.addClass("anamnesis-mcp-status-bar--error");
         break;
       default:
-        this.mcpStatusBarEl.title = "MCP: Not running";
+        this.mcpStatusBarEl.title = "Mcp: Not running";
         break;
     }
   }

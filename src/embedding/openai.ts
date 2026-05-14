@@ -28,7 +28,10 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
   }
 
   async initialize(): Promise<void> {
-    const mod = await import(join(this.pluginDir, "node_modules", "openai")) as unknown as OpenAIModule;
+    // eslint-disable-next-line no-unsanitized/method
+    const mod = (await import(
+      join(this.pluginDir, "node_modules", "openai")
+    )) as unknown as OpenAIModule;
     const OpenAI = mod.default;
     this.client = new OpenAI({
       apiKey: this.apiKey,

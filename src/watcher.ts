@@ -3,7 +3,7 @@ import { IndexingEngine } from "./indexer";
 import type { PluginSettings } from "./settings";
 
 const CONSERVATIVE_MS = 30_000;
-const AGGRESSIVE_MS   =  5_000;
+const AGGRESSIVE_MS = 5_000;
 
 /**
  * Listens for vault file events and queues changes for batch processing.
@@ -20,7 +20,7 @@ export class VaultWatcher {
 
   private pendingModify: Set<string> = new Set();
   private pendingDelete: Set<string> = new Set();
-  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private flushTimer: number | null = null;
 
   private unregister: (() => void)[] = [];
 
@@ -30,7 +30,9 @@ export class VaultWatcher {
     this.settings = settings;
   }
 
-  get isRunning(): boolean { return this.unregister.length > 0; }
+  get isRunning(): boolean {
+    return this.unregister.length > 0;
+  }
 
   start(): void {
     const onModify = this.app.vault.on("modify", (file) => {
@@ -65,7 +67,7 @@ export class VaultWatcher {
   /** Cancel the pending countdown and flush immediately. No-op if queue is empty. */
   flushNow(): void {
     if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
+      window.clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
     if (this.pendingModify.size > 0 || this.pendingDelete.size > 0) {
@@ -75,7 +77,7 @@ export class VaultWatcher {
 
   stop(): void {
     if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
+      window.clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
     this.pendingModify.clear();
@@ -102,10 +104,11 @@ export class VaultWatcher {
   }
 
   private scheduleFlush(): { flushAt: number; delayMs: number } {
-    if (this.flushTimer) clearTimeout(this.flushTimer);
-    const delayMs = this.settings.indexingStrategy === "aggressive" ? AGGRESSIVE_MS : CONSERVATIVE_MS;
+    if (this.flushTimer) window.clearTimeout(this.flushTimer);
+    const delayMs =
+      this.settings.indexingStrategy === "aggressive" ? AGGRESSIVE_MS : CONSERVATIVE_MS;
     const flushAt = Date.now() + delayMs;
-    this.flushTimer = setTimeout(() => void this.flush(), delayMs);
+    this.flushTimer = window.setTimeout(() => void this.flush(), delayMs);
     return { flushAt, delayMs };
   }
 

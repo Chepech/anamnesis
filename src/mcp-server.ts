@@ -36,9 +36,15 @@ export class AnamnesisServerMCP {
     this.app = app;
   }
 
-  get status(): McpStatus { return this._status; }
-  get port(): number { return this._port; }
-  get error(): string { return this._error; }
+  get status(): McpStatus {
+    return this._status;
+  }
+  get port(): number {
+    return this._port;
+  }
+  get error(): string {
+    return this._error;
+  }
 
   async start(port: number): Promise<void> {
     if (this.httpServer) await this.stop();
@@ -53,9 +59,10 @@ export class AnamnesisServerMCP {
     await new Promise<void>((resolve, reject) => {
       this.httpServer!.on("error", (err) => {
         this._status = "error";
-        this._error = (err as NodeJS.ErrnoException).code === "EADDRINUSE"
-          ? `Port ${port} is already in use`
-          : err.message;
+        this._error =
+          (err as NodeJS.ErrnoException).code === "EADDRINUSE"
+            ? `Port ${port} is already in use`
+            : err.message;
         reject(new Error(this._error));
       });
       this.httpServer!.listen(port, "127.0.0.1", () => {
@@ -154,9 +161,7 @@ export class AnamnesisServerMCP {
           importance_score: r.importance_score,
           // LanceDB adds _distance for vector search; cosine distance ∈ [0,2]
           // for unit vectors, so similarity = 1 - distance/2 gives a clean [0,1] score.
-          score: r._distance !== undefined
-            ? Math.max(0, 1 - r._distance / 2)
-            : null,
+          score: r._distance !== undefined ? Math.max(0, 1 - r._distance / 2) : null,
         }));
 
         return {
@@ -171,9 +176,7 @@ export class AnamnesisServerMCP {
       {
         description: "Read the full current content of a vault note by its vault-relative path.",
         inputSchema: {
-          path: z
-            .string()
-            .describe('Vault-relative path, e.g. "Forge/Research/topic.md"'),
+          path: z.string().describe('Vault-relative path, e.g. "Forge/Research/topic.md"'),
         },
       },
       async ({ path }) => {
@@ -201,7 +204,8 @@ export class AnamnesisServerMCP {
     mcpServer.registerTool(
       "list_indexed_files",
       {
-        description: "List all files currently in the Anamnesis vector index, with their chunk counts.",
+        description:
+          "List all files currently in the Anamnesis vector index, with their chunk counts.",
       },
       async () => {
         const chunks = await this.db.getAllChunks();
@@ -230,7 +234,7 @@ export class AnamnesisServerMCP {
 function readBody(req: http.IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
     req.on("end", () => {
       const raw = Buffer.concat(chunks).toString("utf8");
       try {

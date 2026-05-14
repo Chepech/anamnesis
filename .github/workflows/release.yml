@@ -1,0 +1,58 @@
+name: Release
+
+# Triggered by a bare semver tag: 1.0.2, 1.1.0, 2.0.0 — no "v" prefix.
+# Workflow:
+#   npm version patch|minor|major   → bumps package.json, manifest.json,
+#                                      versions.json, commits, tags
+#   git push && git push --tags      → triggers this workflow
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build eslint plugin
+        run: node scripts/setup-eslint-plugin.mjs
+
+      - name: Lint
+        run: npx eslint src/
+
+      - name: Build
+        run: npm run build
+
+      - name: Gather WASM files
+        run: |
+          mkdir -p wasm
+          find node_modules/onnxruntime-web/dist -name "*.wasm" -exec cp {} wasm/ \;
+          echo "WASM files:"
+          ls -lh wasm/
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ github.ref_name }}"
+          gh release create "$VERSION" \
+            --title "Anamnesis $VERSION" \
+            --generate-notes \
+            main.js \
+            embedder-worker.js \
+            manifest.json \
+            styles.css \
+            wasm/*.wasm

@@ -79,21 +79,20 @@ const patchTransformersEnvPlugin = {
   name: "patch-transformers-env",
   setup(build) {
     build.onLoad({ filter: /env\.js$/ }, (args) => {
-        if (!args.path.includes("@xenova")) return null;
+      if (!args.path.includes("@xenova")) return null;
 
-        let source = fs.readFileSync(args.path, "utf8");
+      let source = fs.readFileSync(args.path, "utf8");
 
-        // Guard the __dirname derivation so it falls back to "./" when
-        // import.meta.url is unavailable (esbuild sets import.meta = {} in CJS).
-        // Exact string match avoids regex issues with the `url.fileURLToPath`
-        // namespace import syntax.
-        const BAD  = `? path.dirname(path.dirname(url.fileURLToPath(import.meta.url)))`;
-        const GOOD = `? (import.meta && import.meta.url ? path.dirname(path.dirname(url.fileURLToPath(import.meta.url))) : './')`;
-        source = source.replace(BAD, GOOD);
+      // Guard the __dirname derivation so it falls back to "./" when
+      // import.meta.url is unavailable (esbuild sets import.meta = {} in CJS).
+      // Exact string match avoids regex issues with the `url.fileURLToPath`
+      // namespace import syntax.
+      const BAD = `? path.dirname(path.dirname(url.fileURLToPath(import.meta.url)))`;
+      const GOOD = `? (import.meta && import.meta.url ? path.dirname(path.dirname(url.fileURLToPath(import.meta.url))) : './')`;
+      source = source.replace(BAD, GOOD);
 
-        return { contents: source, loader: "js" };
-      }
-    );
+      return { contents: source, loader: "js" };
+    });
   },
 };
 

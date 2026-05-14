@@ -20,17 +20,17 @@ function getLanceDB(pluginDir: string): LanceDB {
 export const SCHEMA_VERSION = "2";
 
 export interface ChunkRecord extends Record<string, unknown> {
-  id: string;              // "<file_path>:<chunk_index>"
+  id: string; // "<file_path>:<chunk_index>"
   file_path: string;
-  heading: string;         // last heading seen (flat)
-  context_path: string;    // full heading hierarchy: "Infrastructure > Database > Migration"
+  heading: string; // last heading seen (flat)
+  context_path: string; // full heading hierarchy: "Infrastructure > Database > Migration"
   chunk_index: number;
-  last_modified: number;   // Unix ms
-  text: string;            // raw chunk content (no breadcrumb)
+  last_modified: number; // Unix ms
+  text: string; // raw chunk content (no breadcrumb)
   vector: number[];
-  tags: string;            // comma-separated YAML tags
+  tags: string; // comma-separated YAML tags
   importance_score: number; // backlink count; used for post-retrieval boosting
-  schema_version: string;  // matches SCHEMA_VERSION constant
+  schema_version: string; // matches SCHEMA_VERSION constant
 }
 
 export const CHUNKS_TABLE = "chunks";
@@ -70,7 +70,7 @@ export class VectorDB {
         chunk_index: 0,
         last_modified: 0,
         text: "",
-        vector: new Array(this.vectorDim).fill(0),
+        vector: new Array<number>(this.vectorDim).fill(0),
         tags: "",
         importance_score: 0,
         schema_version: SCHEMA_VERSION,
@@ -79,7 +79,9 @@ export class VectorDB {
 
     const table = await this.db.createTable(CHUNKS_TABLE, seed);
     await table.delete('id = "__seed__"');
-    console.debug(`[Anamnesis] Created chunks table (dim=${this.vectorDim}, schema=v${SCHEMA_VERSION})`);
+    console.debug(
+      `[Anamnesis] Created chunks table (dim=${this.vectorDim}, schema=v${SCHEMA_VERSION})`
+    );
     return table;
   }
 
@@ -130,7 +132,8 @@ export class VectorDB {
     // Read one row to get the stored version string
     const rows = await table.query().limit(1).toArray();
     if (rows.length === 0) return SCHEMA_VERSION; // empty table — treat as current
-    return String((rows[0] as Record<string, unknown>).schema_version ?? "1");
+    const sv = (rows[0] as Record<string, unknown>).schema_version;
+    return typeof sv === "string" ? sv : "1";
   }
 
   async countRows(): Promise<number> {
@@ -146,7 +149,7 @@ export class VectorDB {
     const table = await this.db.openTable(CHUNKS_TABLE);
     const total = await table.countRows();
     const rows = await table.query().limit(Math.max(total, 1)).toArray();
-    return rows as unknown as ChunkRecord[];
+    return rows as ChunkRecord[];
   }
 
   async search(
@@ -156,23 +159,21 @@ export class VectorDB {
   ): Promise<ChunkRecord[]> {
     if (!this.db) throw new Error("DB not connected");
     const table = await this.db.openTable(CHUNKS_TABLE);
-    const rows = await table
-      .vectorSearch(vector)
-      .limit(limit)
-      .toArray();
+    // LanceDB toArray() returns any[]; typed at this boundary so the rest is clean
+    type SearchRow = ChunkRecord & { _distance?: number; _boosted_score?: number };
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const rows: SearchRow[] = await table.vectorSearch(vector).limit(limit).toArray();
 
-    if (importanceWeight <= 0) return rows as unknown as ChunkRecord[];
+    if (importanceWeight <= 0) return rows;
 
     // Apply importance boost: lower _distance is better, so subtract the boost
-    type SearchRow = ChunkRecord & { _distance?: number; _boosted_score?: number };
-    return (rows as unknown as SearchRow[])
+    return rows
       .map((r) => ({
         ...r,
         _boosted_score:
-          (r._distance ?? 1) -
-          importanceWeight * Math.log(1 + (r.importance_score ?? 0)),
+          (r._distance ?? 1) - importanceWeight * Math.log(1 + (r.importance_score ?? 0)),
       }))
-      .sort((a, b) => (a._boosted_score ?? 0) - (b._boosted_score ?? 0)) as unknown as ChunkRecord[];
+      .sort((a, b) => (a._boosted_score ?? 0) - (b._boosted_score ?? 0));
   }
 
   close(): void {

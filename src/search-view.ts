@@ -62,7 +62,7 @@ export class SearchView extends ItemView {
     this.inputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         if (this.debounceTimer !== null) {
-          clearTimeout(this.debounceTimer);
+          window.clearTimeout(this.debounceTimer);
           this.debounceTimer = null;
         }
         void this.runSearch();
@@ -78,14 +78,14 @@ export class SearchView extends ItemView {
   }
 
   onClose(): Promise<void> {
-    if (this.debounceTimer !== null) clearTimeout(this.debounceTimer);
+    if (this.debounceTimer !== null) window.clearTimeout(this.debounceTimer);
     return Promise.resolve();
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
 
   private onInput(): void {
-    if (this.debounceTimer !== null) clearTimeout(this.debounceTimer);
+    if (this.debounceTimer !== null) window.clearTimeout(this.debounceTimer);
     const q = this.inputEl.value.trim();
     if (!q) {
       this.statusEl.setText("");
