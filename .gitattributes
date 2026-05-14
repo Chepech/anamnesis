@@ -1,0 +1,10 @@
+# Enforce LF line endings for all text files on all platforms.
+# Prevents CRLF/LF churn between Windows git and WSL git.
+* text=auto eol=lf
+
+# Binaries — no line ending conversion
+*.node binary
+*.wasm binary
+*.gz   binary
+*.png  binary
+*.jpg  binary
