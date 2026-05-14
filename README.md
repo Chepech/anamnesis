@@ -1,6 +1,6 @@
 # Anamnesis
 
-*From Greek ἀνάμνησις — the act of recollection, recovering what was always known.*
+_From Greek ἀνάμνησις — the act of recollection, recovering what was always known._
 
 Anamnesis is an Obsidian plugin that turns your vault into a queryable semantic memory system. It continuously indexes your notes into a local vector database, provides semantic search by meaning rather than keyword, visualizes the conceptual structure of your knowledge as an interactive graph, and exposes everything to AI agents via the Model Context Protocol (MCP).
 
@@ -59,20 +59,20 @@ Anamnesis depends on two components that cannot be distributed through the Obsid
 
 On first load (or after a fresh install where these files are absent), the plugin detects what is missing and downloads it automatically from the GitHub release, showing a progress notice in the bottom-right corner. This happens once; subsequent loads skip the check.
 
-| Component | Source |
-|-----------|--------|
-| `embedder-worker.js` | GitHub release asset |
-| `wasm/*.wasm` | GitHub release asset |
+| Component                           | Source                                           |
+| ----------------------------------- | ------------------------------------------------ |
+| `embedder-worker.js`                | GitHub release asset                             |
+| `wasm/*.wasm`                       | GitHub release asset                             |
 | `@lancedb/lancedb` and dependencies | npm registry (tarballs from `package-lock.json`) |
-| Platform-specific native binary | npm registry (correct binary for your OS/arch) |
+| Platform-specific native binary     | npm registry (correct binary for your OS/arch)   |
 
 ### Supported platforms
 
-| Platform | Architecture | Status |
-|---|---|---|
-| Windows | x64 | Tested |
-| macOS | x64, arm64 (Apple Silicon) | Supported, untested |
-| Linux | x64, arm64 | Supported, untested |
+| Platform | Architecture               | Status              |
+| -------- | -------------------------- | ------------------- |
+| Windows  | x64                        | Tested              |
+| macOS    | x64, arm64 (Apple Silicon) | Supported, untested |
+| Linux    | x64, arm64                 | Supported, untested |
 
 > The embedding model (~23 MB for the default `all-MiniLM-L6-v2`) is downloaded from Hugging Face on first use and cached locally after that.
 
@@ -129,6 +129,7 @@ The `importance_weight` is tunable in settings (default `0.05`) — small enough
 Opened via the ribbon icon or `Anamnesis: Open control panel` in the command palette. Lives in the right sidebar.
 
 Shows:
+
 - Current indexing status with a live progress indicator
 - Chunk count and active model
 - Re-index, Pause, and Resume controls
@@ -151,6 +152,7 @@ Each note is represented by its first chunk's 384-dimensional embedding vector. 
 ### Status Bar
 
 The database icon in the bottom-right status bar is interactive. Click it to:
+
 - **While idle**: trigger a re-index or open the control panel
 - **While indexing**: pause or cancel the current run
 - **While paused**: resume or cancel
@@ -165,6 +167,7 @@ Anamnesis can run a local MCP server, making your vault queryable from any MCP-c
 **Enable:** Settings → MCP Server → toggle on. Default port: `8868`.
 
 **Claude Desktop / Claude Code config:**
+
 ```json
 {
   "mcpServers": {
@@ -177,29 +180,29 @@ The config snippet (with copy button) is available directly in plugin settings.
 
 ### Tools
 
-| Tool | Description |
-|------|-------------|
-| `search_vault` | Semantic search. Returns ranked chunks with `file_path`, `context_path`, `text`, `tags`, `importance_score`, and similarity `score`. |
-| `read_note` | Full markdown content of a note by vault-relative path. |
-| `list_indexed_files` | All indexed file paths with chunk counts, sorted by chunk count. |
+| Tool                 | Description                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `search_vault`       | Semantic search. Returns ranked chunks with `file_path`, `context_path`, `text`, `tags`, `importance_score`, and similarity `score`. |
+| `read_note`          | Full markdown content of a note by vault-relative path.                                                                              |
+| `list_indexed_files` | All indexed file paths with chunk counts, sorted by chunk count.                                                                     |
 
 ---
 
 ## Settings
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Provider | Local | `local` runs fully offline. `openai` uses the OpenAI embeddings API. |
-| Local model | all-MiniLM-L6-v2 | 384-dim, fast. Alternative: all-mpnet-base-v2 (768-dim, higher quality). |
-| OpenAI model | text-embedding-3-small | Only shown when provider is OpenAI. |
-| Chunk size | 512 | Max characters per chunk. |
-| Chunk overlap | 64 | Characters of overlap between consecutive chunks. |
-| Exclude patterns | `.obsidian`, `node_modules`, `Archives` | One folder/glob per line. Matching files are skipped. |
-| Auto-index on change | On | Re-embeds modified notes in the background. Paused when a schema or model change is detected until re-index completes. |
-| Indexing strategy | Conservative | Conservative (30 s delay) batches edits; Aggressive (5 s) picks up changes faster. |
-| Graph importance boost | 0.05 | How much backlink count influences search ranking. 0 = pure semantic similarity. Takes effect immediately, no re-index needed. |
-| MCP enabled | Off | Starts the local HTTP MCP server. |
-| MCP port | 8868 | Port the MCP server listens on (127.0.0.1 only). |
+| Setting                | Default                                 | Description                                                                                                                    |
+| ---------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Provider               | Local                                   | `local` runs fully offline. `openai` uses the OpenAI embeddings API.                                                           |
+| Local model            | all-MiniLM-L6-v2                        | 384-dim, fast. Alternative: all-mpnet-base-v2 (768-dim, higher quality).                                                       |
+| OpenAI model           | text-embedding-3-small                  | Only shown when provider is OpenAI.                                                                                            |
+| Chunk size             | 512                                     | Max characters per chunk.                                                                                                      |
+| Chunk overlap          | 64                                      | Characters of overlap between consecutive chunks.                                                                              |
+| Exclude patterns       | `.obsidian`, `node_modules`, `Archives` | One folder/glob per line. Matching files are skipped.                                                                          |
+| Auto-index on change   | On                                      | Re-embeds modified notes in the background. Paused when a schema or model change is detected until re-index completes.         |
+| Indexing strategy      | Conservative                            | Conservative (30 s delay) batches edits; Aggressive (5 s) picks up changes faster.                                             |
+| Graph importance boost | 0.05                                    | How much backlink count influences search ranking. 0 = pure semantic similarity. Takes effect immediately, no re-index needed. |
+| MCP enabled            | Off                                     | Starts the local HTTP MCP server.                                                                                              |
+| MCP port               | 8868                                    | Port the MCP server listens on (127.0.0.1 only).                                                                               |
 
 Changing the embedding model or triggering a schema update (new plugin version) requires a full re-index. The plugin will display a notice on load and suppress the background watcher until re-indexing is complete.
 
@@ -210,6 +213,7 @@ Changing the embedding model or triggering a schema update (new plugin version) 
 By default Anamnesis runs **entirely offline**. The local embedding provider (all-MiniLM-L6-v2 / all-mpnet-base-v2) downloads once from Hugging Face (~23–90 MB) and runs inside Obsidian via ONNX Runtime. No note content ever leaves your device when using the local provider.
 
 **OpenAI provider (optional):** if you switch to the OpenAI embedding provider in settings, your note content is sent to the [OpenAI Embeddings API](https://platform.openai.com/docs/guides/embeddings) to compute vectors. Specifically:
+
 - Text chunks of your notes (up to 512 characters each) are transmitted to `api.openai.com` on every index and re-index.
 - OpenAI does not store API inputs by default (see [OpenAI data usage policies](https://openai.com/policies/api-data-usage-policies)), but your content is processed on their servers.
 - Your API key is stored locally in Obsidian's plugin data and is never sent anywhere except to OpenAI's API endpoint.
@@ -220,18 +224,18 @@ The MCP server binds to `127.0.0.1` only and is not accessible outside your loca
 
 ## Technical Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Language | TypeScript |
-| Plugin API | Obsidian Plugin API |
-| Bundler | esbuild (CJS, 3 custom plugins for Electron compat) |
-| First-run bootstrap | Custom downloader + ustar tar.gz extractor (Node built-ins only) |
-| Vector DB | LanceDB (native Rust addon, loaded at runtime via `window.require`) |
-| Local Embeddings | @xenova/transformers + onnxruntime-web (WASM, bundled) |
-| Remote Embeddings | OpenAI SDK (optional, loaded at runtime) |
-| Dimensionality Reduction | umap-js |
-| Visualization | Canvas 2D |
-| Agent Protocol | MCP SDK (Streamable HTTP) |
+| Layer                    | Technology                                                          |
+| ------------------------ | ------------------------------------------------------------------- |
+| Language                 | TypeScript                                                          |
+| Plugin API               | Obsidian Plugin API                                                 |
+| Bundler                  | esbuild (CJS, 3 custom plugins for Electron compat)                 |
+| First-run bootstrap      | Custom downloader + ustar tar.gz extractor (Node built-ins only)    |
+| Vector DB                | LanceDB (native Rust addon, loaded at runtime via `window.require`) |
+| Local Embeddings         | @xenova/transformers + onnxruntime-web (WASM, bundled)              |
+| Remote Embeddings        | OpenAI SDK (optional, loaded at runtime)                            |
+| Dimensionality Reduction | umap-js                                                             |
+| Visualization            | Canvas 2D                                                           |
+| Agent Protocol           | MCP SDK (Streamable HTTP)                                           |
 
 ---
 
@@ -289,11 +293,15 @@ SemanticSearch  VectorGraph  MCP Server
 
 ## Changelog
 
-### Unreleased
+### 1.0.5
 
+- Fixed bootstrapper 404: WASM download URL had an erroneous `wasm/` path prefix — GitHub release assets are at the release root, not a subdirectory
+- Fixed Worker `SecurityError`: Electron blocks `file://` URLs loaded from `app://obsidian.md` origin. `embedder-worker.js` is now loaded via `fs.readFileSync` + Blob URL instead of `pathToFileURL`
+- Fixed WASM load failure (`Not allowed to load local resource`): same origin restriction. Each `.wasm` file is now read from disk and served as a Blob URL to `onnxruntime-web`, in both the main-thread fallback and the worker bundle
 - **Hybrid search** — BM25 keyword retrieval runs in parallel with semantic vector search; results are merged using Reciprocal Rank Fusion (k=60). Each result card shows `~` (semantic) and `K` (keyword) badges so you can see why a note surfaced. Falls back to pure semantic if hybrid is disabled in settings. `search_vault` MCP tool now returns `match_sources` per chunk.
 - **Self-bootstrapping install** — plugin detects missing runtime components on first load and downloads them automatically: `embedder-worker.js` and `wasm/*.wasm` from the GitHub release, `@lancedb/lancedb` and the correct platform-specific native binary from the npm registry. No build step required for end users.
 - **CI/CD pipeline** — GitHub Actions CI (lint, prettier, type-check, build) runs on every push and PR. Release workflow builds all artifacts and publishes a tagged GitHub release with `bootstrap-manifest.json` included.
+- Enforced LF line endings via `.gitattributes` to prevent CRLF/LF churn between Windows and WSL git checkouts
 
 ### 1.0.2
 
