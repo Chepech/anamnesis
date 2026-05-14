@@ -293,6 +293,10 @@ SemanticSearch  VectorGraph  MCP Server
 
 ## Changelog
 
+### 1.0.6
+
+- Fixed Obsidian community review violations: `setCssProps` instead of `element.style.*`, `querySelector<T>` instead of cast, `Setting.setHeading()` instead of `createEl("h4")`, `as unknown as` double-cast for LanceDB type introspection, `app.vault.configDir` instead of hardcoded `.obsidian`, and MCP acronym casing in menu items
+
 ### 1.0.5
 
 - Fixed bootstrapper 404: WASM download URL had an erroneous `wasm/` path prefix — GitHub release assets are at the release root, not a subdirectory
