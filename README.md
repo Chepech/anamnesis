@@ -277,9 +277,44 @@ SemanticSearch  VectorGraph  MCP Server
 - [x] Graph-aware embeddings — backlink boost for well-connected notes
 - [x] YAML tag extraction — tags stored as filterable metadata
 - [x] Self-bootstrapping install — downloads native binary and WASM on first run, no build step required
+- [x] Hybrid search — BM25 keyword + semantic combined via Reciprocal Rank Fusion
 - [ ] Community directory listing (pending review)
+- [ ] Multilingual embedding model (paraphrase-multilingual-MiniLM-L12-v2)
+- [ ] Fuzzy title matching (Jaro-Winkler)
 - [ ] Parent-child multi-vector retrieval — summary + chunk at two resolutions
-- [ ] Hybrid search — BM25 keyword + vector similarity combined
 - [ ] Approximate k-NN for large vaults (>2k notes)
-- [ ] Graph legend overlay showing folder → color mapping
 - [ ] Search relevance feedback loop
+
+---
+
+## Changelog
+
+### Unreleased
+
+- **Hybrid search** — BM25 keyword retrieval runs in parallel with semantic vector search; results are merged using Reciprocal Rank Fusion (k=60). Each result card shows `~` (semantic) and `K` (keyword) badges so you can see why a note surfaced. Falls back to pure semantic if hybrid is disabled in settings. `search_vault` MCP tool now returns `match_sources` per chunk.
+- **Self-bootstrapping install** — plugin detects missing runtime components on first load and downloads them automatically: `embedder-worker.js` and `wasm/*.wasm` from the GitHub release, `@lancedb/lancedb` and the correct platform-specific native binary from the npm registry. No build step required for end users.
+- **CI/CD pipeline** — GitHub Actions CI (lint, prettier, type-check, build) runs on every push and PR. Release workflow builds all artifacts and publishes a tagged GitHub release with `bootstrap-manifest.json` included.
+
+### 1.0.2
+
+- Fixed startup reindex race: on first install `initialIndexDone` was never set, causing a full reindex on every startup after the first
+- Fixed pause button state machine — pause/resume during the initial index run no longer gets stuck
+- Fixed file safety during index: files deleted or moved while `indexAll()` is running are now skipped gracefully instead of crashing the run
+- Added obsidian-plugin ESLint ruleset with full lint enforcement across the codebase
+- Added Prettier formatting enforcement
+
+### 1.0.1
+
+- Fixed LanceDB native module loading via `window.require` for popout window compatibility
+- Resolved all ObsidianReviewBot lint violations for community plugin submission
+- Submitted to the Obsidian community plugin directory (pending review)
+
+### 1.0.0
+
+- **Semantic search** — find notes by concept using local `all-MiniLM-L6-v2` embeddings (384-dim, fully offline). Optional OpenAI provider for higher-quality embeddings.
+- **Context-aware chunking** — notes split at heading boundaries; each chunk carries the full heading hierarchy (`Infrastructure > Database > Migration`) injected into the embedding so structural position is encoded into the vector
+- **Graph-aware embeddings** — backlink count stored as `importance_score`; optional post-retrieval boost surfaces well-connected notes
+- **Vector graph** — interactive 2D map of vault semantic space via UMAP; nodes colored by top-level folder, click to open note
+- **MCP server** — local Streamable HTTP server exposing `search_vault`, `read_note`, and `list_indexed_files` to Claude Code, Claude Desktop, and any MCP client
+- **Incremental indexing** — vault watcher re-embeds modified notes in the background with a configurable delay (5 s aggressive / 30 s conservative)
+- **Schema versioning** — index schema is versioned; mismatch on load triggers a re-index notice
