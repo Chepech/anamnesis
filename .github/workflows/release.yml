@@ -48,6 +48,9 @@ jobs:
           echo "WASM files:"
           ls -lh wasm/
 
+      - name: Generate bootstrap manifest
+        run: node scripts/generate-bootstrap-manifest.mjs
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -60,4 +63,5 @@ jobs:
             embedder-worker.js \
             manifest.json \
             styles.css \
+            bootstrap-manifest.json \
             wasm/*.wasm

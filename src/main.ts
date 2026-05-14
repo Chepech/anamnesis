@@ -11,6 +11,7 @@ import { SearchView, SEARCH_VIEW_TYPE } from "./search-view";
 import { GraphView, GRAPH_VIEW_TYPE } from "./graph-view";
 import { AnamnesisPanel, PANEL_VIEW_TYPE } from "./panel-view";
 import { AnamnesisServerMCP } from "./mcp-server";
+import { Bootstrapper } from "./bootstrap";
 
 export default class AnamnesisPlugin extends Plugin {
   settings!: PluginSettings;
@@ -87,6 +88,10 @@ export default class AnamnesisPlugin extends Plugin {
     this.setMcpStatus("stopped");
 
     try {
+      const bootstrapper = new Bootstrapper(this.app, this.manifest);
+      if (bootstrapper.needsSetup()) {
+        await bootstrapper.run();
+      }
       await this.initCore();
     } catch (err) {
       console.error("[Anamnesis] Initialization failed:", err);
