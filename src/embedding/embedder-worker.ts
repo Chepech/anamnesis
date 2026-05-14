@@ -13,7 +13,8 @@
  *   worker → main  { type:"error",  id, message }       (embed failure)
  */
 
-import { join, sep } from "path";
+import fs from "fs";
+import { join } from "path";
 import * as Transformers from "@xenova/transformers";
 import type { MainToWorkerMsg } from "./bridge";
 
@@ -28,11 +29,20 @@ ctx.onmessage = async (e: MessageEvent<MainToWorkerMsg>) => {
 
   if (msg.type === "init") {
     try {
-      const wasmPath = join(msg.pluginDir, "wasm") + sep;
-      type OnnxBackend = { wasm?: { wasmPaths: string; numThreads: number } };
+      // Electron blocks file:// loads from app://obsidian.md origin in workers too.
+      // Build Blob URLs for each WASM file so ort-web can fetch them.
+      const wasmDir = join(msg.pluginDir, "wasm");
+      const wasmPathsMap: Record<string, string> = {};
+      for (const file of fs.readdirSync(wasmDir).filter((f: string) => f.endsWith(".wasm"))) {
+        const buf = fs.readFileSync(join(wasmDir, file));
+        wasmPathsMap[file] = URL.createObjectURL(new Blob([buf], { type: "application/wasm" }));
+      }
+      type OnnxBackend = {
+        wasm?: { wasmPaths: string | Record<string, string>; numThreads: number };
+      };
       const onnxEnv = (Transformers.env.backends as Record<string, OnnxBackend | undefined>)?.onnx;
       if (onnxEnv?.wasm) {
-        onnxEnv.wasm.wasmPaths = wasmPath;
+        onnxEnv.wasm.wasmPaths = wasmPathsMap;
         onnxEnv.wasm.numThreads = 1;
       }
       Transformers.env.cacheDir = msg.cacheDir;

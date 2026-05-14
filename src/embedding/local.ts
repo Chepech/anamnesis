@@ -1,5 +1,5 @@
-import { join, sep } from "path";
-import { pathToFileURL } from "url";
+import fs from "fs";
+import { join } from "path";
 import type { EmbeddingProvider, WorkerToMainMsg } from "./bridge";
 
 // Static import — bundled into main.js by esbuild so Electron's runtime
@@ -83,9 +83,12 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
 
   private async initWorker(): Promise<void> {
     const workerPath = join(this.pluginDir, "embedder-worker.js");
-    const workerUrl = pathToFileURL(workerPath).href;
-
-    this.worker = new Worker(workerUrl);
+    // Electron blocks file:// URLs loaded from app://obsidian.md origin.
+    // Read the script and create a Blob URL instead.
+    const code = fs.readFileSync(workerPath);
+    const blobUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+    this.worker = new Worker(blobUrl);
+    URL.revokeObjectURL(blobUrl);
 
     return new Promise<void>((resolve, reject) => {
       // Allow up to 2 minutes for first-run model download
@@ -161,14 +164,21 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
   // ── Main-thread fallback path ──────────────────────────────────────────────
 
   private async initMainThread(): Promise<void> {
-    // Point onnxruntime-web WASM files to the local plugin dir.
-    // Must be a plain filesystem path — ort-web.node.js calls
-    // fs.readFileSync(path.normalize(...)) so file:// URLs get mangled.
-    const wasmPath = join(this.pluginDir, "wasm") + sep;
-    type OnnxBackend = { wasm?: { wasmPaths: string; numThreads: number } };
+    // Electron blocks file:// resource loads from app://obsidian.md origin.
+    // Read each WASM file and create a Blob URL so ort-web can fetch it
+    // from an object:// URL, which is same-origin with the page context.
+    const wasmDir = join(this.pluginDir, "wasm");
+    const wasmPathsMap: Record<string, string> = {};
+    for (const file of fs.readdirSync(wasmDir).filter((f) => f.endsWith(".wasm"))) {
+      const buf = fs.readFileSync(join(wasmDir, file));
+      wasmPathsMap[file] = URL.createObjectURL(new Blob([buf], { type: "application/wasm" }));
+    }
+    type OnnxBackend = {
+      wasm?: { wasmPaths: string | Record<string, string>; numThreads: number };
+    };
     const onnxEnv = (Transformers.env.backends as Record<string, OnnxBackend | undefined>)?.onnx;
     if (onnxEnv?.wasm) {
-      onnxEnv.wasm.wasmPaths = wasmPath;
+      onnxEnv.wasm.wasmPaths = wasmPathsMap;
       onnxEnv.wasm.numThreads = 1;
     } else {
       console.warn("[Anamnesis] env.backends.onnx.wasm not available — WASM may use CDN.");

@@ -13364,6 +13364,7 @@ var require_sharp = __commonJS({
 });
 
 // src/embedding/embedder-worker.ts
+var import_fs3 = __toESM(require("fs"));
 var import_path3 = require("path");
 
 // node_modules/@xenova/transformers/src/utils/core.js
@@ -28877,10 +28878,15 @@ ctx.onmessage = async (e) => {
   const msg = e.data;
   if (msg.type === "init") {
     try {
-      const wasmPath = (0, import_path3.join)(msg.pluginDir, "wasm") + import_path3.sep;
+      const wasmDir = (0, import_path3.join)(msg.pluginDir, "wasm");
+      const wasmPathsMap = {};
+      for (const file of import_fs3.default.readdirSync(wasmDir).filter((f) => f.endsWith(".wasm"))) {
+        const buf = import_fs3.default.readFileSync((0, import_path3.join)(wasmDir, file));
+        wasmPathsMap[file] = URL.createObjectURL(new Blob([buf], { type: "application/wasm" }));
+      }
       const onnxEnv = env.backends?.onnx;
       if (onnxEnv?.wasm) {
-        onnxEnv.wasm.wasmPaths = wasmPath;
+        onnxEnv.wasm.wasmPaths = wasmPathsMap;
         onnxEnv.wasm.numThreads = 1;
       }
       env.cacheDir = msg.cacheDir;
