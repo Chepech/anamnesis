@@ -4,3 +4,5 @@ embedder-worker.js
 *.js.map
 data/
 .DS_Store
+bootstrap-manifest.json
+wasm/
