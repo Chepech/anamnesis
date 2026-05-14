@@ -35,6 +35,9 @@ jobs:
       - name: Build eslint plugin
         run: node scripts/setup-eslint-plugin.mjs
 
+      - name: Package eslint plugin dist
+        run: tar -czf eslint-plugin-obsidianmd-dist.tar.gz -C node_modules/eslint-plugin-obsidianmd dist
+
       - name: Lint
         run: npx eslint src/
 
@@ -64,4 +67,5 @@ jobs:
             manifest.json \
             styles.css \
             bootstrap-manifest.json \
+            eslint-plugin-obsidianmd-dist.tar.gz \
             wasm/*.wasm
