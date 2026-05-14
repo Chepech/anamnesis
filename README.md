@@ -16,54 +16,65 @@ Anamnesis is an Obsidian plugin that turns your vault into a queryable semantic 
 
 ---
 
-## Getting Started
+## Installation
 
-### Why this plugin requires a build step
+### Community directory (pending)
 
-Anamnesis depends on two components that cannot be bundled into a single `main.js`:
+The plugin is pending review in the Obsidian community directory. Once approved it will be installable via Settings → Community plugins → Browse → search "Anamnesis".
 
-- **LanceDB** — a native Rust addon (`.node` binary). npm automatically picks the right binary for your OS and architecture when you run `npm install`.
-- **ONNX Runtime WASM** — several `.wasm` files that the local embedding model loads at runtime via `file://` URLs.
+### Manual install (no build required)
 
-Because of this, the standard Obsidian plugin install (community directory or manual copy of `main.js` + `manifest.json`) will not work on its own. You need to build from source so that `npm install` fetches the correct native binary for your platform and the deploy script places everything in the right layout.
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/Chepech/anamnesis/releases/latest).
+2. Copy them into your vault at `.obsidian/plugins/anamnesis/`.
+3. Enable the plugin in Obsidian → Settings → Community plugins.
+
+On first load the plugin automatically downloads the remaining runtime components (see [First-run setup](#first-run-setup) below).
+
+### Build from source (development)
+
+**Requirements:** Node.js 20+ and npm.
+
+```sh
+git clone https://github.com/Chepech/anamnesis
+cd anamnesis
+npm install
+node scripts/setup-eslint-plugin.mjs   # downloads pre-built dist or builds from source
+npm run build
+```
+
+Deploy to your vault:
+
+```sh
+node scripts/deploy.mjs "/path/to/your/vault"
+```
+
+---
+
+## First-run setup
+
+Anamnesis depends on two components that cannot be distributed through the Obsidian community directory:
+
+- **LanceDB** — a native Rust addon (`.node` binary). The correct binary depends on your OS and CPU architecture.
+- **ONNX Runtime WASM** — several `.wasm` files loaded by the local embedding model at runtime.
+
+On first load (or after a fresh install where these files are absent), the plugin detects what is missing and downloads it automatically from the GitHub release, showing a progress notice in the bottom-right corner. This happens once; subsequent loads skip the check.
+
+| Component | Source |
+|-----------|--------|
+| `embedder-worker.js` | GitHub release asset |
+| `wasm/*.wasm` | GitHub release asset |
+| `@lancedb/lancedb` and dependencies | npm registry (tarballs from `package-lock.json`) |
+| Platform-specific native binary | npm registry (correct binary for your OS/arch) |
 
 ### Supported platforms
 
 | Platform | Architecture | Status |
 |---|---|---|
 | Windows | x64 | Tested |
-| macOS | x64, arm64 (Apple Silicon) | Binaries available, untested |
-| Linux | x64, arm64 | Binaries available, untested |
+| macOS | x64, arm64 (Apple Silicon) | Supported, untested |
+| Linux | x64, arm64 | Supported, untested |
 
-### Install (build from source)
-
-**Requirements:** Node.js 18+ and npm.
-
-```sh
-git clone https://github.com/Chepech/anamnesis
-cd anamnesis
-npm install
-npm run build
-```
-
-Then deploy to your vault:
-
-```sh
-# Windows
-node scripts/deploy.mjs "C:/path/to/your/vault"
-
-# macOS / Linux — edit scripts/deploy.mjs first:
-# Replace "@lancedb/lancedb-win32-x64-msvc" with the package that matches your platform:
-#   macOS Apple Silicon:  @lancedb/lancedb-darwin-arm64
-#   macOS Intel:          @lancedb/lancedb-darwin-x64
-#   Linux x64:            @lancedb/lancedb-linux-x64-gnu
-#   Linux arm64:          @lancedb/lancedb-linux-arm64-gnu
-node scripts/deploy.mjs "/path/to/your/vault"
-```
-
-Then enable the plugin in Obsidian → Settings → Community plugins and click **Re-index vault**.
-
-> The model download (~23 MB for the default `all-MiniLM-L6-v2`) happens on first run and is cached locally after that.
+> The embedding model (~23 MB for the default `all-MiniLM-L6-v2`) is downloaded from Hugging Face on first use and cached locally after that.
 
 ---
 
@@ -153,7 +164,7 @@ Anamnesis can run a local MCP server, making your vault queryable from any MCP-c
 
 **Enable:** Settings → MCP Server → toggle on. Default port: `8868`.
 
-**Claude Desktop config:**
+**Claude Desktop / Claude Code config:**
 ```json
 {
   "mcpServers": {
@@ -171,12 +182,6 @@ The config snippet (with copy button) is available directly in plugin settings.
 | `search_vault` | Semantic search. Returns ranked chunks with `file_path`, `context_path`, `text`, `tags`, `importance_score`, and similarity `score`. |
 | `read_note` | Full markdown content of a note by vault-relative path. |
 | `list_indexed_files` | All indexed file paths with chunk counts, sorted by chunk count. |
-
----
-
-## Setup
-
-See [Getting Started](#getting-started) above — build from source is required for all platforms. The deploy script handles the full layout including native binaries and WASM files.
 
 ---
 
@@ -220,9 +225,10 @@ The MCP server binds to `127.0.0.1` only and is not accessible outside your loca
 | Language | TypeScript |
 | Plugin API | Obsidian Plugin API |
 | Bundler | esbuild (CJS, 3 custom plugins for Electron compat) |
-| Vector DB | LanceDB (native Rust addon, loaded at runtime) |
-| Local Embeddings | @xenova/transformers + onnxruntime-web (bundled) |
-| Remote Embeddings | OpenAI SDK (optional) |
+| First-run bootstrap | Custom downloader + ustar tar.gz extractor (Node built-ins only) |
+| Vector DB | LanceDB (native Rust addon, loaded at runtime via `window.require`) |
+| Local Embeddings | @xenova/transformers + onnxruntime-web (WASM, bundled) |
+| Remote Embeddings | OpenAI SDK (optional, loaded at runtime) |
 | Dimensionality Reduction | umap-js |
 | Visualization | Canvas 2D |
 | Agent Protocol | MCP SDK (Streamable HTTP) |
@@ -234,6 +240,10 @@ The MCP server binds to `127.0.0.1` only and is not accessible outside your loca
 ```
 Obsidian Vault
      │
+     ▼
+Bootstrapper         — on first load: downloads embedder-worker.js, wasm/*.wasm,
+     │                 and the correct LanceDB native binary from GitHub release
+     │                 and npm registry; skipped on subsequent loads
      ▼
 VaultWatcher         — create / modify / delete / rename events, 500ms debounce
      │
@@ -266,6 +276,8 @@ SemanticSearch  VectorGraph  MCP Server
 - [x] Breadcrumb injection — structural address embedded into every vector
 - [x] Graph-aware embeddings — backlink boost for well-connected notes
 - [x] YAML tag extraction — tags stored as filterable metadata
+- [x] Self-bootstrapping install — downloads native binary and WASM on first run, no build step required
+- [ ] Community directory listing (pending review)
 - [ ] Parent-child multi-vector retrieval — summary + chunk at two resolutions
 - [ ] Hybrid search — BM25 keyword + vector similarity combined
 - [ ] Approximate k-NN for large vaults (>2k notes)
